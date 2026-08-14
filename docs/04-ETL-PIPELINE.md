@@ -119,9 +119,22 @@ Gurgaon -> Gurugram                  Bangalore -> Bengaluru
 Dadra and Nagar Haveli + Daman and Diu  (merged 2020 — handle both forms)
 ```
 
-Ambiguous district names requiring state scoping:
-`Aurangabad` (MH, BR) · `Bilaspur` (CG, HP) · `Hamirpur` (HP, UP) ·
-`Pratapgarh` (UP, RJ) · `Balrampur` (UP, CG)
+Ambiguous district names requiring state scoping — **verified against live LGD
+data in Phase 1** (`STATUS.md` item 13); 2 of the original 5 pairs turned out to
+be stale, resolved by district renaming since this list was written:
+- `Bilaspur` (CG, HP), `Hamirpur` (HP, UP), `Pratapgarh` (UP, RJ) — **still
+  genuinely ambiguous**, confirmed present in current `gold.dim_geography`.
+- ~~`Aurangabad` (MH, BR)~~ — **no longer ambiguous**. Maharashtra's Aurangabad
+  was renamed **Chhatrapati Sambhajinagar** in 2023. Only Bihar's Aurangabad
+  remains under that name.
+- ~~`Balrampur` (UP, CG)~~ — **no longer ambiguous**. Chhattisgarh's Balrampur
+  is now named **Balrampur-Ramanujganj** in LGD. Only UP's Balrampur remains
+  under that name.
+
+The resolver still scopes every district match by state regardless — this
+matters for the *remaining* ambiguous pairs, and for historical MCA records
+that may predate a rename (an old filing could plausibly still say "Aurangabad,
+Maharashtra" even though the district's current LGD name differs).
 
 ## Stage 4 — Load to gold
 
