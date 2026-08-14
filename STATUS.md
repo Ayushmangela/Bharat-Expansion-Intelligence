@@ -583,6 +583,46 @@ status here is worse than no status file at all.
       the SHAP waterfall or any scored/ranked view, since that data doesn't
       exist. `.env.local` created for `NEXT_PUBLIC_API_URL`, gitignored.
 
+21. **Wired up real concurrency, at the user's request for speed** —
+    `docs/09-DATA-QUALITY.md` always specified "token bucket, 2 rps, max 4
+    concurrent," but nothing had ever actually used
+    `settings.http_max_concurrency`; every fetch was fully sequential, so
+    effective throughput was latency-bound (~0.5-0.7 req/s in practice)
+    rather than rate-limit-bound. Built a shared, thread-safe
+    `TokenBucketLimiter` (`pipeline/connectors/rate_limiter.py`) used by
+    every `DataGovInClient` instance, and rewrote `mca.py`'s `fetch_state`
+    to fetch all of a state's pages concurrently via `ThreadPoolExecutor`
+    once `total` is known from the first page — checkpointed **per
+    completed offset** now (not a single `last_offset` scalar), since
+    concurrent pages finish out of order.
+
+    **Tried the documented settings (4 concurrent, 2 req/s) first — they
+    failed in practice.** Two consecutive attempts at fetching Kerala
+    (127K rows) exhausted the retry budget partway through (server-side
+    failures persisting through 5 retries with growing backoff), even
+    though a single ad hoc request always succeeded when checked
+    immediately after. **Not a fixed rate-limit violation** — this reads
+    like the server has a lower real tolerance for sustained concurrent
+    load than its own docs claim, or is generally flakier under sustained
+    multi-hour session load than a single spot-check reveals. Rather than
+    keep guessing at the exact right rate/concurrency numbers, dialled back
+    to a more conservative `HTTP_MAX_CONCURRENCY=2`, `HTTP_REQUESTS_PER_SECOND=1.2`
+    and — more importantly — **doubled the retry budget** (`HTTP_MAX_RETRIES`
+    5 → 10), since checkpointing makes a slow, patient recovery safe even
+    if a fast one isn't reliable. Kerala then completed cleanly, resuming
+    from its own checkpoint (101/128 pages already done) rather than
+    restarting from zero — the per-offset checkpoint redesign paid for
+    itself immediately.
+
+    **Net result**: real but modest speedup, not the ~4x the docs'
+    numbers would suggest — reliability mattered more than chasing maximum
+    throughput for an unattended multi-hour job. `HTTP_REQUESTS_PER_SECOND`
+    now 1.2 (was 0.7 sequential, briefly tried 2.0 concurrent), concurrency
+    now genuinely 2-way instead of 1-way. If picking this up again, the
+    honest next experiment would be finding the real ceiling empirically
+    (binary search on concurrency at fixed rate) rather than trusting the
+    docs' numbers or my second guess.
+
 ---
 
 ## Environment notes for whoever runs this next

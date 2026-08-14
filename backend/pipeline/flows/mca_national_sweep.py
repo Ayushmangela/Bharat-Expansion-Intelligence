@@ -21,6 +21,8 @@ ALREADY_LOADED = {
     "andaman and nicobar islands", "andhra pradesh", "arunachal pradesh", "assam", "chandigarh",
     "delhi", "gujarat",  # completed this sweep; delhi/gujarat re-verified against the pagination-truncation fix
     "sikkim",  # fetched as a pre-sweep validation test
+    "haryana", "himachal pradesh", "jammu & kashmir", "jharkhand",
+    "ladakh", "kerala",  # fetched validating the concurrency change
 }
 
 SUMMARY_PATH = "/tmp/mca_national_sweep_summary.json"
