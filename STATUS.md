@@ -271,6 +271,70 @@ status here is worse than no status file at all.
     Two states, different sizes and address styles, both comfortably above
     target, idempotency holds under real fact data.
 
+14. **Census population join routed through `GeographyResolver` properly.**
+    The ad-hoc normalised-name dict `compute_bfr.py` used for the Goa/Bihar
+    checkpoint had no state scoping — silently wrong for the ambiguous
+    district names. Fixed by adding `lgd_state_code`/`lgd_district_code`/
+    `resolution_method` columns to `silver.census_population_district`
+    (migration `5208aec274da`) and a new
+    `pipeline/transforms/census_silver.py` that resolves every one of the
+    640 Census rows through the resolver at load time, quarantining what
+    doesn't resolve — same pattern as MCA.
+
+    **First run: 87.03% resolution nationally — below the 90% gate.**
+    Investigated rather than accepted: all 83 failures were Census-2011-
+    vintage district names that have since been renamed. Two systemic waves
+    account for most of it — **Karnataka renamed ~11 districts to Kannada
+    spellings in 2014** (Bellary→Ballari, Gulbarga→Kalaburagi, Mysore→Mysuru,
+    etc.) and **West Bengal standardised ~8 district name transliterations**
+    (Haora→Howrah, Puruliya→Purulia, etc.) — plus scattered individual
+    renames elsewhere (Allahabad→Prayagraj, Faizabad→Ayodhya, Gurgaon-era
+    Mewat→Nuh) and two districts that moved to the newly-created Ladakh UT
+    in 2019 (Kargil, Leh). **Checked whether a looser fuzzy-match threshold
+    would catch these first — it wouldn't**: trigram similarity for these
+    pairs ranged 0.08–0.35 (Gulbarga/Kalaburagi, Haora/Howrah), since
+    they're genuine renames sharing few characters, not typos. Fuzzy
+    matching cannot bridge that; only an explicit alias can.
+
+    Researched and verified all 75 renames individually against public
+    facts, cross-checked every target actually exists in `dim_geography`
+    before inserting (`pipeline/geography/census_alias_backfill.py`, 75/75
+    targets found, 0 misses) — added as `silver.geography_alias` entries,
+    same mechanism the resolver already uses for `Orissa -> Odisha` etc.
+
+    **Deliberately left 8 unresolved, not force-aliased**: these are genuine
+    *structural splits* — one 2011 district that is now multiple current
+    districts — where a single alias would misattribute 100% of the 2011
+    population to just one successor and silently corrupt any KPI built on
+    it. Left quarantined pending a real apportionment methodology (a Phase
+    2+ decision, not a Phase 1 shortcut): Telangana's Mahbubnagar/
+    Rangareddy (2016 reorg, each split into several), West Bengal's
+    Barddhaman (→ Purba/Paschim Bardhaman, 2017), Meghalaya's Jaintia Hills
+    (→ East/West Jaintia Hills), Sikkim's 4 old districts (2022 reorg added
+    Pakyong/Soreng as new 5th/6th districts).
+
+    **Re-run after the alias backfill: 98.75% national resolution**
+    (632/640) — exactly the 8 predicted structural splits remained, nothing
+    unexpected turned up. `compute_bfr.py` now joins on the resolved LGD
+    codes instead of the name dict; re-verified Goa's numbers are unchanged
+    (North Goa May 2026: still 10.147 per 100k) and ran it fresh against all
+    38 Bihar districts for the first time — **zero districts came back with
+    a missing population match**, and Patna (the state capital) correctly
+    shows by far the highest BFR (4.864 vs ~0.2–1.0 for the rest), which is
+    exactly the pattern you'd expect and a good sign the KPI is measuring
+    something real, not noise.
+
+    **One open design question found while re-verifying idempotency**:
+    `silver.geography_quarantine` has no natural key in
+    `docs/03-DATA-MODEL.md`'s own DDL, so re-running `census_silver.py`
+    duplicated its 8 quarantine rows on a second pass (deduplicated by hand
+    for now). Unlike `dim_geography` (clearly a dimension, must be
+    idempotent), it's genuinely ambiguous whether quarantine should
+    dedupe-per-source-per-item or append one row per failed *attempt* as an
+    audit trail of persistent failures over time. Left as an open question
+    for whoever owns this table's design rather than guessing — either
+    answer is defensible, but the docs don't currently say which.
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -295,15 +359,18 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Phase 1's checkpoint is met and stress-tested (Goa + Bihar, both above the 90%
-gate, idempotency confirmed on real fact data). Remaining before/alongside Phase 2:
+Phase 1 is now solid: checkpoint met, stress-tested on two states (Goa 95.57%,
+Bihar 100%), idempotency verified on real fact data, and the Census join is
+routed properly through the resolver (98.75% national, remainder is genuine
+structural splits, not a bug). Remaining before/alongside Phase 2:
 
-1. **Route the Census population join through `GeographyResolver`** instead of the
-   direct normalised-name dict used in `compute_bfr.py` (see item 10 above) — the
-   ad hoc version worked for Goa/Bihar but hasn't been proven against the 3
-   remaining genuinely-ambiguous district names (Bilaspur, Hamirpur, Pratapgarh).
-2. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
-   (Census literacy/worker-classification, CEA) before or after Phase 2.
+1. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
+   (Census literacy/worker-classification — needed to turn BFR from a
+   total-population proxy into the KPI as formally defined; CEA power supply)
+   before or after Phase 2.
+2. Decide on an apportionment methodology for the 8 quarantined structural-split
+   census districts if/when their population matters (currently just excluded,
+   not guessed at).
 3. Phase 2 proper: MCA sweep across ALL states (~3.67M rows, checkpointed/resumable
    — the connector already supports this per-state, just needs to loop all states),
    Udyam connector + snapshot-diff, all five validation gates wired,

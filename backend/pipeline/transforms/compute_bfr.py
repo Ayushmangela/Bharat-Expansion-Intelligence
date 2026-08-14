@@ -16,47 +16,40 @@ import json
 import psycopg
 from app.config import settings
 
-from pipeline.geography.resolver import normalise
-
 
 def compute(state_lgd_code: int) -> list[dict]:
     conn = psycopg.connect(settings.database_url.replace("+psycopg", ""))
 
-    # NOTE: dim_geography.district_census2011_code (from LGD) and
-    # silver.census_population_district's own codes are NOT the same
-    # numbering scheme — confirmed by cross-checking Alappuzha (LGD: '598',
-    # this resource: '11') and Goa's districts. Two different sources both
-    # calling their column "census 2011 code" does not mean the values are
-    # comparable. Joining on normalised district NAME (scoped by state)
-    # instead — see STATUS.md for the full finding.
+    # Census population is joined via lgd_state_code/lgd_district_code,
+    # resolved once at load time by pipeline/transforms/census_silver.py
+    # through the same GeographyResolver MCA uses (98.75% national
+    # resolution; the 8 unresolved are genuine post-2011 district splits
+    # with no single correct target — see STATUS.md). This replaced an
+    # earlier ad-hoc normalised-name dict join that had no state scoping
+    # and was silently wrong for any ambiguous district name.
     rows = conn.execute(
         """
         SELECT
             g.district_name,
             g.lgd_district_code,
             date_trunc('month', fc.incorporation_date)::date AS month,
-            count(*) AS new_incorporations
+            count(*) AS new_incorporations,
+            c.population_total_2011
         FROM gold.fact_company fc
         JOIN gold.dim_geography g ON g.geo_key = fc.geo_key
+        LEFT JOIN silver.census_population_district c
+            ON c.lgd_state_code = g.lgd_state_code AND c.lgd_district_code = g.lgd_district_code
         WHERE g.lgd_state_code = %s
           AND fc.incorporation_date IS NOT NULL
           AND (fc.quality_flags & 4) = 0  -- exclude QUALITY_BIT_OUTLIER (flagged, not deleted, per rule 4)
-        GROUP BY g.district_name, g.lgd_district_code, date_trunc('month', fc.incorporation_date)
+        GROUP BY g.district_name, g.lgd_district_code, date_trunc('month', fc.incorporation_date), c.population_total_2011
         ORDER BY g.district_name, month
         """,
         (state_lgd_code,),
     ).fetchall()
 
-    population_by_name = {
-        normalise(district_name): population_total
-        for (district_name, population_total) in conn.execute(
-            "SELECT district_name, population_total_2011 FROM silver.census_population_district"
-        ).fetchall()
-    }
-
     results = []
-    for district_name, district_code, month, new_incorp in rows:
-        population = population_by_name.get(normalise(district_name))
+    for district_name, district_code, month, new_incorp, population in rows:
         bfr = None
         if population and population > 0:
             bfr = round(new_incorp / population * 100_000, 3)
