@@ -36,6 +36,16 @@ export interface DistrictListResponse {
   total: number;
   limit: number;
   offset: number;
+  sort: string;
+  direction: string;
+}
+
+export interface StateSummary {
+  state_name: string;
+  lgd_state_code: number;
+  total_districts: number;
+  districts_with_data: number;
+  company_count: number;
 }
 
 export interface DistrictDetail {
@@ -69,15 +79,30 @@ export function getOverview() {
   return getJson<Overview>("/api/v1/overview");
 }
 
-export function listDistricts(params: { state_code?: number; q?: string; limit?: number; offset?: number } = {}) {
+export function listDistricts(
+  params: {
+    state_code?: number;
+    q?: string;
+    limit?: number;
+    offset?: number;
+    sort?: string;
+    direction?: string;
+  } = {},
+) {
   const search = new URLSearchParams();
   if (params.state_code) search.set("state_code", String(params.state_code));
   if (params.q) search.set("q", params.q);
   search.set("limit", String(params.limit ?? 50));
   search.set("offset", String(params.offset ?? 0));
+  if (params.sort) search.set("sort", params.sort);
+  if (params.direction) search.set("direction", params.direction);
   return getJson<DistrictListResponse>(`/api/v1/districts?${search.toString()}`);
 }
 
 export function getDistrict(lgdDistrictCode: number) {
   return getJson<DistrictDetail>(`/api/v1/districts/${lgdDistrictCode}`);
+}
+
+export function listStates() {
+  return getJson<{ items: StateSummary[] }>("/api/v1/states").then((r) => r.items);
 }

@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { getDistrict } from "@/lib/api";
+import CompanyStatusPieChart from "@/app/components/CompanyStatusPieChart";
+import MonthlyIncorporationsChart from "@/app/components/MonthlyIncorporationsChart";
+import MsmeBarChart from "@/app/components/MsmeBarChart";
+import Card from "@/app/components/Card";
 
 export default async function DistrictDetailPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -13,89 +18,106 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
 
   const { geography, company_status_breakdown, msme, monthly_incorporations } = data;
   const totalCompanies = company_status_breakdown.reduce((sum, s) => sum + s.count, 0);
+  // API returns newest-first (LIMIT 24, ORDER BY month DESC); a trend line reads
+  // more naturally chronological, oldest to newest.
+  const chronologicalIncorporations = [...monthly_incorporations].reverse();
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link href="/districts" className="text-sm text-zinc-500 hover:underline">
-          ← All districts
+        <Link href="/districts" className="inline-flex items-center gap-1.5 text-sm text-ink-secondary hover:text-ink hover:underline">
+          <ArrowLeft size={14} strokeWidth={2} />
+          All districts
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">{geography.district_name}</h1>
-        <p className="text-sm text-zinc-500">
+        <h1 className="mt-2 text-2xl font-semibold text-ink">{geography.district_name}</h1>
+        <p className="text-sm text-ink-secondary">
           {geography.state_name} · LGD district code {geography.lgd_district_code}
         </p>
       </div>
 
-      <section>
-        <h2 className="text-lg font-semibold">Company status ({totalCompanies.toLocaleString()} total)</h2>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {company_status_breakdown.map((s) => (
-            <div key={s.status} className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">{s.status}</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{s.count.toLocaleString()}</div>
-              <div className="text-xs text-zinc-400">{((s.count / totalCompanies) * 100).toFixed(1)}%</div>
+      <Card title={`Company status (${totalCompanies.toLocaleString()} total)`}>
+        {totalCompanies === 0 ? (
+          <div className="flex h-32 items-center justify-center text-sm text-ink-muted">
+            No registered companies loaded for this district yet.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {company_status_breakdown.map((s) => (
+                <div key={s.status} className="rounded-lg border border-hairline/40 bg-page p-3">
+                  <div className="text-xs text-ink-muted">{s.status}</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{s.count.toLocaleString()}</div>
+                  <div className="text-xs text-ink-muted">{((s.count / totalCompanies) * 100).toFixed(1)}%</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="mt-4">
+              <CompanyStatusPieChart breakdown={company_status_breakdown} />
+            </div>
+          </>
+        )}
+      </Card>
 
       {msme && (
-        <section>
-          <h2 className="text-lg font-semibold">MSME (Udyam, cumulative-to-date)</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            manufacturing is derived as total − services (no Udyam manufacturing-specific resource
-            exists — see STATUS.md item 15).
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">Micro</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{msme.micro.toLocaleString()}</div>
+        <Card
+          title="MSME (Udyam, cumulative-to-date)"
+          subtitle="Manufacturing is derived as total − services (no Udyam manufacturing-specific resource exists — see STATUS.md item 15)."
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-hairline/40 bg-page p-3">
+              <div className="text-xs text-ink-muted">Micro</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{msme.micro.toLocaleString()}</div>
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">Small</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{msme.small.toLocaleString()}</div>
+            <div className="rounded-lg border border-hairline/40 bg-page p-3">
+              <div className="text-xs text-ink-muted">Small</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{msme.small.toLocaleString()}</div>
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">Medium</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{msme.medium.toLocaleString()}</div>
+            <div className="rounded-lg border border-hairline/40 bg-page p-3">
+              <div className="text-xs text-ink-muted">Medium</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{msme.medium.toLocaleString()}</div>
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">Manufacturing (derived)</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{msme.manufacturing.toLocaleString()}</div>
+            <div className="rounded-lg border border-hairline/40 bg-page p-3">
+              <div className="text-xs text-ink-muted">Manufacturing (derived)</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-ink">
+                {msme.manufacturing.toLocaleString()}
+              </div>
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-3">
-              <div className="text-xs text-zinc-500">Services</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{msme.services.toLocaleString()}</div>
+            <div className="rounded-lg border border-hairline/40 bg-page p-3">
+              <div className="text-xs text-ink-muted">Services</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{msme.services.toLocaleString()}</div>
             </div>
           </div>
-        </section>
+          <div className="mt-4">
+            <MsmeBarChart msme={msme} />
+          </div>
+        </Card>
       )}
 
       {monthly_incorporations.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold">Recent monthly incorporations</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Raw new-company counts by month (date-outlier rows excluded, per quality_flags).
-          </p>
-          <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+        <Card
+          title="Recent monthly incorporations"
+          subtitle="Raw new-company counts by month (date-outlier rows excluded, per quality_flags)."
+        >
+          <MonthlyIncorporationsChart monthly={chronologicalIncorporations} />
+          <div className="mt-4 max-h-64 overflow-y-auto rounded-lg border border-hairline/40">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 text-left text-zinc-500">
+              <thead className="sticky top-0 bg-page">
+                <tr className="border-b border-hairline/40 text-left text-ink-muted">
                   <th className="px-4 py-2 font-medium">Month</th>
-                  <th className="px-4 py-2 font-medium text-right">New incorporations</th>
+                  <th className="px-4 py-2 text-right font-medium">New incorporations</th>
                 </tr>
               </thead>
               <tbody>
                 {monthly_incorporations.map((m) => (
-                  <tr key={m.month} className="border-b border-zinc-100 last:border-0">
-                    <td className="px-4 py-2">{m.month.slice(0, 7)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{m.count}</td>
+                  <tr key={m.month} className="border-b border-hairline/20 last:border-0">
+                    <td className="px-4 py-2 text-ink-secondary">{m.month.slice(0, 7)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-secondary">{m.count}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
       )}
     </div>
   );

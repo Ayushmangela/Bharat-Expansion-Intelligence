@@ -623,6 +623,128 @@ status here is worse than no status file at all.
     (binary search on concurrency at fixed rate) rather than trusting the
     docs' numbers or my second guess.
 
+22. **Both remaining Phase 0 gaps resolved via parallel research agents.**
+    The MCA sweep itself can't be sped up by adding more agents (it's
+    bottlenecked by data.gov.in's own rate tolerance, which multiple
+    uncoordinated agent processes would only stress further — each agent's
+    rate limiter runs in its own process and wouldn't share state). But
+    Phase 0's two open gaps live on **different domains entirely**, so they
+    parallelize for real with zero contention. Spawned two research-only
+    agents (no file writes, report-and-return) while continuing the sweep
+    and frontend work myself:
+
+    - **CEA power supply — resolved, with a real compliance question
+      attached.** CEA publishes current Power Supply Position PDFs directly
+      at `cea.nic.in` (July 2026 data live as of this check), and there's an
+      undocumented-but-unauthenticated WordPress AJAX endpoint
+      (`POST /wp-admin/admin-ajax.php`, verified with plain `curl`) that
+      makes this genuinely automatable despite filenames not following a
+      predictable pattern. **But CEA's own copyright policy requires prior
+      permission via email before reproduction** — stricter than GODL-India,
+      not equivalent to what this project is built around. Documented in
+      `docs/RESOURCE-REGISTRY.md` S08 as a real decision point, not
+      something I decided unilaterally: either request permission once and
+      document the grant in `ATTRIBUTIONS.md`, or treat CEA as out of scope
+      for v1 under the roadmap's reduced-scope fallback.
+    - **Census literacy/worker classification — found, exactly what BFR
+      needs.** Not on data.gov.in at all (confirmed why the earlier search
+      missed it: data.gov.in's own Primary Census Abstract mirror is
+      explicitly state-grain, the district version just isn't there). Lives
+      on Census of India's own NADA microdata portal: table `PC11_PCA-SD`,
+      a single XLSX, 1920 district rows = exactly 640 districts ×
+      {Total/Rural/Urban} — verified downloaded and parsed for real (not
+      just a link check). Has the full C-series breakdown (literacy,
+      main/marginal workers by category) — the actual working-age
+      population data BFR's formula calls for, not the total-population
+      proxy currently in use. Same geography caveat as the population table
+      already loaded (Census's own numeric codes, needs the same resolver-
+      based crosswalk, not a direct join) and a distinct, non-GODL
+      attribution-required licence (ORGI's own terms, not data.gov.in's
+      GODL badge). Full detail in `docs/RESOURCE-REGISTRY.md` S19. **Found,
+      not yet wired up** — loading it into the pipeline and rebuilding BFR
+      as the real KPI (not the proxy) is separate follow-up work.
+
+23. **Found and fixed a real thread-safety bug from the concurrency work**,
+    caught by Karnataka specifically (258 pages — the first state with
+    enough concurrent page-fetches to expose it; smaller states got lucky).
+    `fetch_one()` read `records_by_offset.values()` to compute a heuristic
+    (`known_so_far`) **without holding the lock**, while other threads were
+    concurrently writing to that same dict inside their own locked section —
+    a textbook `RuntimeError: dictionary changed size during iteration`.
+    Fixed by taking the lock for the read too (cheap, no real cost). The
+    sweep's own per-state error isolation caught this correctly in
+    production — Karnataka failed cleanly, got logged, and the sweep moved
+    on to the next state rather than crashing entirely — but Karnataka
+    itself needed a manual retry once the fix landed. Re-ran Karnataka
+    specifically (not a random small state) to confirm the fix holds under
+    the real concurrent load that exposed the bug in the first place, not
+    just under light testing.
+
+24. **Preview UI got real charts** (Recharts — already the project's specified
+    charting library per CLAUDE.md, not a new dependency decision), built by
+    a dedicated agent while the sweep and research agents ran in parallel:
+    horizontal bar chart of top districts (overview), donut chart of company
+    status, area/trend chart of monthly incorporations, and a grouped bar
+    chart of MSME breakdown (district detail). Verified myself afterward,
+    independent of the building agent's own verification — one chart
+    appeared completely blank on first screenshot (only the legend showing),
+    investigated via direct DOM inspection (`elementFromPoint`, checking
+    actual SVG path geometry and computed fill colors) rather than assumed
+    broken or assumed fine: the path data, colors, and positioning were all
+    genuinely correct, and a second screenshot moments later showed it
+    rendering properly. Concluded it was a transient screenshot-timing
+    artifact (page still painting at first capture), not a real bug — but
+    reached that conclusion by checking the DOM directly, not by hoping.
+
+25. **Dashboard redesigned properly**, per an explicit "need better dashboard
+    UI" request — a dedicated agent used the `dataviz` skill's actual method
+    (form → validated palette → marks → interaction → accessibility) rather
+    than ad hoc polish. Real changes, verified myself independently after
+    the agent's own verification (screenshots of all 3 page types, live
+    against real growing data — the sweep advanced ~860K companies while
+    the agent worked):
+    - Sidebar shell replacing the thin top nav (collapses properly below
+      `md`, checked at 1024px and 375px).
+    - KPI row rebuilt as 4 tiles instead of 5 redundant stat boxes — hero
+      stat, two meters (districts/states covered — a meter, not a fabricated
+      delta, since there's no prior snapshot to compare against), one
+      status-toned tile for quarantined rows.
+    - Design tokens (`ink`/`ink-secondary`/`ink-muted`/`surface`/`page`/
+      `hairline`/`accent`/status colors) replacing ad hoc Tailwind `zinc-*`
+      classes everywhere, so the app reads as one system.
+    - Districts list: sortable columns (server-driven, whitelisted — never
+      raw string interpolation into SQL), a state filter, inline magnitude
+      bars.
+    - **A state-level choropleth map** (ECharts, approved in the stack for
+      maps), sequential blue ramp with quantile bins, a distinct gray for
+      "not yet ingested." Uses a third-party MIT-licensed boundary file
+      (`udit-001/india-maps-data`, simplified via `mapshaper`) for **display
+      geometry only** — the underlying data join is still LGD-code-based as
+      required; the map's own state-name join is a separate, cosmetic
+      concern, documented in the UI caption. **Added to `ATTRIBUTIONS.md`**
+      (the agent flagged this gap itself rather than silently leaving it —
+      I added the entry, noting explicitly that this one asset is MIT, not
+      GODL-India, since CLAUDE.md's licence rule assumes GODL by default).
+    - New backend: `state_summary()` repository function +
+      `GET /api/v1/states`, keeping the router→service→repository layering
+      intact. Ruff/mypy clean.
+    - New dependencies: `echarts` (already approved for maps) and
+      `lucide-react` (icon set, not in the original stack table but a
+      standard tiny dependency — flagged by the agent, not silently added).
+    - **Two real bugs found and fixed during the agent's own verification**,
+      not cosmetic: an ECharts crash on a zero-size container at first paint
+      (fixed with a dimension-ready retry), and a pre-existing Recharts
+      3.10.1 + React 19 bug in the donut chart rendering empty shapes with
+      no visible path (fixed with `isAnimationActive={false}`) — this
+      existed before the redesign too, just never caught since the earlier
+      chart-building pass's "blank chart" investigation concluded (correctly,
+      for that specific instance) that it was a screenshot-timing artifact;
+      this is a second, real instance of a visually similar symptom with a
+      different, structural root cause. Both confirmed via DOM/canvas
+      inspection, not guessed at.
+    - Known gap: no frontend test suite yet (`vitest` isn't wired up) —
+      flagged, not fixed, since it's outside a UI-redesign task's scope.
+
 ---
 
 ## Environment notes for whoever runs this next

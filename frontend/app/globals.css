@@ -1,19 +1,36 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+/* Design tokens — the dataviz skill's validated palette (see
+   app/components/chart-colors.ts for the JS-side mirror used by Recharts/ECharts).
+   Light theme only: dark mode was previously removed after its CSS fought with
+   light Tailwind classes; re-introducing it needs its own pass, not a byproduct
+   of this redesign. Declared directly in @theme (not aliased through :root) since
+   there is no runtime light/dark swap to support yet. */
+@theme {
+  --color-page: #f9f9f7; /* page plane */
+  --color-surface: #fcfcfb; /* card / chart surface */
+  --color-ink: #0b0b0b; /* primary text */
+  --color-ink-secondary: #52514e;
+  --color-ink-muted: #898781;
+  --color-grid: #e1e0d9;
+  --color-hairline: #c3c2b7;
+  --color-border: rgba(11, 11, 11, 0.1);
+  --color-accent: #2a78d6; /* categorical slot 1 / sequential hue */
+  --color-success: #006300;
+  --color-status-good: #0ca30c;
+  --color-status-warning: #fab219;
+  --color-status-serious: #ec835a;
+  --color-status-critical: #d03b3b;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 25%, transparent);
 }

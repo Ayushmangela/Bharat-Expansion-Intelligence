@@ -22,8 +22,15 @@ def list_districts(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
+    sort: str = Query(default="company_count"),
+    direction: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> dict:
-    return district_service.list_districts(state_code, q, limit, offset)
+    return district_service.list_districts(state_code, q, limit, offset, sort, direction)
+
+
+@router.get("/states")
+def state_summary() -> dict:
+    return {"items": district_service.state_summary()}
 
 
 @router.get("/districts/{lgd_district_code}")

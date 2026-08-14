@@ -3,9 +3,16 @@
 from app.repositories import district_repository
 
 
-def list_districts(state_code: int | None, q: str | None, limit: int, offset: int) -> dict:
-    items, total = district_repository.list_districts(state_code, q, limit, offset)
-    return {"items": items, "total": total, "limit": limit, "offset": offset}
+def list_districts(
+    state_code: int | None,
+    q: str | None,
+    limit: int,
+    offset: int,
+    sort: str = "company_count",
+    direction: str = "desc",
+) -> dict:
+    items, total = district_repository.list_districts(state_code, q, limit, offset, sort, direction)
+    return {"items": items, "total": total, "limit": limit, "offset": offset, "sort": sort, "direction": direction}
 
 
 def get_district(lgd_district_code: int) -> dict | None:
@@ -14,3 +21,7 @@ def get_district(lgd_district_code: int) -> dict | None:
 
 def national_overview() -> dict:
     return district_repository.national_overview()
+
+
+def state_summary() -> list[dict]:
+    return district_repository.state_summary()

@@ -76,6 +76,19 @@ Licensed under GODL-India. **Data vintage: 2011.**
 
 ---
 
+## Map geometry (not GODL — a distinct licence, noted explicitly)
+
+**India state boundaries (choropleth display only)**
+`udit-001/india-maps-data` (GitHub), https://github.com/udit-001/india-maps-data —
+**MIT licence**, not GODL-India. This is a third-party boundary/geometry dataset used
+only to draw the state-level choropleth map on the frontend (`frontend/public/data/india-states.geojson`,
+simplified locally via `mapshaper`); it carries no government statistical data of its
+own and is not joined into `gold` — the underlying company/district data it's drawn
+over is still resolved via LGD codes as required. Reflects the post-2019 state list
+(Telangana, Ladakh, merged Dadra & Nagar Haveli/Daman & Diu present).
+
+---
+
 ## Software licences
 
 See `pyproject.toml` and `frontend/package.json`. All dependencies are permissively

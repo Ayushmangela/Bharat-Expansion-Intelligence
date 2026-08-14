@@ -18,7 +18,25 @@ def get_conn() -> psycopg.Connection:
     return psycopg.connect(settings.database_url.replace("+psycopg", ""))
 
 
-def list_districts(state_code: int | None, q: str | None, limit: int, offset: int) -> tuple[list[dict], int]:
+# Whitelist of sortable columns — never interpolate the client-supplied sort key
+# directly into SQL. Values are the actual ORDER BY expressions (aliases where the
+# column is an aggregate, qualified names otherwise).
+_SORTABLE_COLUMNS = {
+    "company_count": "company_count",
+    "active_company_count": "active_company_count",
+    "district_name": "g.district_name",
+    "state_name": "g.state_name",
+}
+
+
+def list_districts(
+    state_code: int | None,
+    q: str | None,
+    limit: int,
+    offset: int,
+    sort: str = "company_count",
+    direction: str = "desc",
+) -> tuple[list[dict], int]:
     conn = get_conn()
     where = ["g.grain = 'district'", "g.is_current"]
     params: list = []
@@ -31,6 +49,9 @@ def list_districts(state_code: int | None, q: str | None, limit: int, offset: in
     where_sql = " AND ".join(where)
 
     total = conn.execute(f"SELECT count(*) FROM gold.dim_geography g WHERE {where_sql}", params).fetchone()[0]  # type: ignore[index]
+
+    order_col = _SORTABLE_COLUMNS.get(sort, "company_count")
+    order_dir = "ASC" if direction.lower() == "asc" else "DESC"
 
     rows = conn.execute(
         f"""
@@ -46,7 +67,7 @@ def list_districts(state_code: int | None, q: str | None, limit: int, offset: in
         WHERE {where_sql}
         GROUP BY g.lgd_district_code, g.district_name, g.state_name, g.lgd_state_code,
                  fdm.msme_micro, fdm.msme_small, fdm.msme_medium, fdm.msme_manufacturing, fdm.msme_services
-        ORDER BY company_count DESC NULLS LAST
+        ORDER BY {order_col} {order_dir} NULLS LAST
         LIMIT %s OFFSET %s
         """,
         [*params, limit, offset],
@@ -128,6 +149,37 @@ def get_district(lgd_district_code: int) -> dict | None:
         ),
         "monthly_incorporations": [{"month": m.isoformat(), "count": c} for m, c in monthly_incorporations],
     }
+
+
+def state_summary() -> list[dict]:
+    """Company counts by state, for every state/UT in the LGD geography table —
+    including states with zero ingested companies yet, so callers (e.g. the
+    state choropleth) can distinguish 'zero' from 'not yet ingested'."""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT g.state_name, g.lgd_state_code,
+               count(DISTINCT g.lgd_district_code) AS total_districts,
+               count(DISTINCT fc.geo_key) AS districts_with_data,
+               count(fc.company_key) AS company_count
+        FROM gold.dim_geography g
+        LEFT JOIN gold.fact_company fc ON fc.geo_key = g.geo_key
+        WHERE g.grain = 'district' AND g.is_current
+        GROUP BY g.state_name, g.lgd_state_code
+        ORDER BY company_count DESC NULLS LAST
+        """
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "state_name": r[0],
+            "lgd_state_code": r[1],
+            "total_districts": r[2],
+            "districts_with_data": r[3],
+            "company_count": r[4],
+        }
+        for r in rows
+    ]
 
 
 def national_overview() -> dict:

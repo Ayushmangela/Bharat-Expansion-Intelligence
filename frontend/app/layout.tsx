@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Sidebar, { MobileNav } from "@/app/components/Sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,21 +24,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900">
-        <header className="border-b border-zinc-200 bg-white">
-          <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-4">
-            <a href="/" className="text-lg font-semibold">
-              Bharat Expansion Intelligence
-            </a>
-            <a href="/" className="text-sm text-zinc-600 hover:text-zinc-900">
-              Overview
-            </a>
-            <a href="/districts" className="text-sm text-zinc-600 hover:text-zinc-900">
-              Districts
-            </a>
-          </nav>
-        </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
+      <body className="flex min-h-full bg-page text-ink">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MobileNav />
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );

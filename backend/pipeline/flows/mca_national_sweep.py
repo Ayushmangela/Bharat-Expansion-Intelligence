@@ -23,6 +23,8 @@ ALREADY_LOADED = {
     "sikkim",  # fetched as a pre-sweep validation test
     "haryana", "himachal pradesh", "jammu & kashmir", "jharkhand",
     "ladakh", "kerala",  # fetched validating the concurrency change
+    "lakshadweep",  # completed before the Karnataka threading bug was found
+    "karnataka",  # re-fetched to confirm the threading fix under real load
 }
 
 SUMMARY_PATH = "/tmp/mca_national_sweep_summary.json"
