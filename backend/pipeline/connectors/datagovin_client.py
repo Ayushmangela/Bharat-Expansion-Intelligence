@@ -23,21 +23,53 @@ class DataGovInClient:
         """Fetch every record from a resource, paginating via offset/limit.
 
         Returns (records, total_available, observed_field_schema).
+
+        BUG FOUND live during the Phase 2 MCA sweep: the server is
+        occasionally flaky at deep pagination offsets and returns HTTP 200
+        with an EMPTY records list even when `total` says far more data
+        exists (confirmed transient — re-querying the exact same offset
+        moments later succeeded normally; not a fixed depth ceiling). The
+        original version here treated any empty page as "reached the end,"
+        which silently truncated results (Delhi: 203,000 of 507,637 rows —
+        a 60% loss — before this was caught). This almost certainly also
+        explains the earlier, smaller pincode-directory shortfall
+        (165,627 of 184,740) that was previously written off as an
+        unexplained "quirk" — same bug, smaller blast radius. Fix: an empty
+        page only means "done" if it's consistent with `total`; otherwise
+        retry the SAME offset with backoff, and raise rather than silently
+        truncate if it never recovers.
         """
         offset = 0
         all_records: list[dict] = []
         total = None
         field_schema: list[dict] = []
+        max_empty_retries = settings.http_max_retries
 
         while True:
             page = self._get_page(resource_id, offset=offset, limit=batch_size, filters=filters)
             if total is None:
-                total = page.get("total")
+                total = page.get("total") or 0
                 field_schema = page.get("field", [])
             records = page.get("records", [])
+
+            if not records and len(all_records) < total:
+                for attempt in range(max_empty_retries):
+                    sleep_s = min(1 * (2**attempt), 60)
+                    time.sleep(sleep_s)
+                    retry_page = self._get_page(resource_id, offset=offset, limit=batch_size, filters=filters)
+                    records = retry_page.get("records", [])
+                    if records:
+                        break
+                if not records:
+                    raise RuntimeError(
+                        f"{resource_id}: empty page at offset={offset} persisted after "
+                        f"{max_empty_retries} retries, but total={total} implies "
+                        f"{total - len(all_records)} more records — refusing to silently truncate"
+                    )
+
             all_records.extend(records)
             time.sleep(1.0 / settings.http_requests_per_second)
-            if not records or len(all_records) >= (total or 0):
+            if not records or len(all_records) >= total:
                 break
             offset += batch_size
 

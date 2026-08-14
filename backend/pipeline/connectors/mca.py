@@ -38,6 +38,18 @@ class MCAConnector(BaseConnector):
         return CHECKPOINT_DIR / f"mca_{state_filter}.json"
 
     def fetch_state(self, state_filter: str, batch_size: int = 1000) -> RawPayload:
+        """BUG FOUND live during the Phase 2 sweep: the server is occasionally
+        flaky at deep pagination offsets and returns HTTP 200 with an EMPTY
+        records list even though `total` says far more data exists (confirmed
+        transient — the exact same offset succeeded moments later). The
+        original loop here treated any empty page as "done," which silently
+        truncated Delhi to 203,000 of 507,637 rows (60% loss) before this was
+        caught. Fixed: an empty page only means "done" if consistent with
+        `total`; otherwise retry the same offset with backoff, and raise
+        rather than silently truncate if it never recovers — the checkpoint
+        stays in place (not deleted) so a raised error is resumable, same as
+        any other failure.
+        """
         ckpt_path = self._checkpoint_path(state_filter)
         offset = 0
         records: list[dict] = []
@@ -53,16 +65,33 @@ class MCAConnector(BaseConnector):
         while True:
             page = self.client.fetch_page(MCA_COMPANY_MASTER, offset=offset, limit=batch_size, filters=filters)
             if total is None:
-                total = page.get("total")
+                total = page.get("total") or 0
                 field_schema = page.get("field", [])
             page_records = page.get("records", [])
+
+            if not page_records and len(records) < total:
+                for attempt in range(settings.http_max_retries):
+                    sleep_s = min(1 * (2**attempt), 60)
+                    time.sleep(sleep_s)
+                    retry_page = self.client.fetch_page(MCA_COMPANY_MASTER, offset=offset, limit=batch_size, filters=filters)
+                    page_records = retry_page.get("records", [])
+                    if page_records:
+                        break
+                if not page_records:
+                    raise RuntimeError(
+                        f"MCA state={state_filter}: empty page at offset={offset} persisted after "
+                        f"{settings.http_max_retries} retries, but total={total} implies "
+                        f"{total - len(records)} more records — refusing to silently truncate. "
+                        f"Checkpoint preserved at {ckpt_path}, safe to re-run."
+                    )
+
             records.extend(page_records)
             offset += batch_size
             time.sleep(1.0 / settings.http_requests_per_second)
 
             ckpt_path.write_text(json.dumps({"last_offset": offset, "records": records}))
 
-            if not page_records or len(records) >= (total or 0):
+            if not page_records or len(records) >= total:
                 break
 
         ckpt_path.unlink(missing_ok=True)

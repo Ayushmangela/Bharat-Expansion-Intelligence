@@ -12,6 +12,7 @@ Order per docs/04-ETL-PIPELINE.md Stage 3:
 
 import re
 from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 import psycopg
@@ -78,10 +79,15 @@ def ensure_company_status(conn: psycopg.Connection, status_name: str) -> int:
 
 def transform_state(state_filter: str, ingest_date: date | None = None) -> dict:
     ingest_date = ingest_date or date.today()
-    parquet_path = (
-        f"{settings.bronze_path}/source=S02_MCA/ingest_date={ingest_date.isoformat()}/state={state_filter}/part-000.parquet"
-    )
-    df = pd.read_parquet(parquet_path).fillna("")
+    partition_dir = f"{settings.bronze_path}/source=S02_MCA/ingest_date={ingest_date.isoformat()}/state={state_filter}"
+    # Read ALL part files, not just part-000 — a corrected re-fetch after a
+    # truncated run (see datagovin_client.py / mca.py fix) writes additional
+    # parts rather than overwriting bronze (bronze is immutable, rule 12).
+    part_paths = sorted(Path(partition_dir).glob("part-*.parquet"))
+    if not part_paths:
+        raise FileNotFoundError(f"no bronze parts found in {partition_dir}")
+    df = pd.concat([pd.read_parquet(p) for p in part_paths], ignore_index=True).fillna("")
+    parquet_path = ";".join(str(p) for p in part_paths)
 
     # Stage 3.1: schema validation — fails the run on violation, no silent coercion.
     df = MCACompanyRawSchema.validate(df)

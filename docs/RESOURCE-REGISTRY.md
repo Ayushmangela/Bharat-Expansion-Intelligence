@@ -189,12 +189,16 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
   Phase 1 Goa checkpoint. See `STATUS.md` for the full story.
 - Fields: `circlename`, `regionname`, `divisionname`, `officename`, `pincode`,
   `officetype`, `delivery`, `district`, `statename`, `latitude`, `longitude`
-- Total rows: reported `184,740`; **only 165,627 actually came back** across
-  full pagination (~19,000-row gap) — a page returned empty before offset
-  reached the reported total. Not investigated further; noted as an observed
-  data.gov.in pagination quirk, not assumed to be a client bug (client-side
-  retry/pagination logic verified correct against total in other resources).
-  Resolves to 19,586 unique pincodes after loading (plausible national count).
+- Total rows: reported `184,740`; **only 165,627 actually came back** on the
+  original fetch (~19,000-row gap). **Now understood, not a mystery**: this
+  was the same transient deep-pagination bug found and fixed during the
+  Phase 2 MCA sweep (`STATUS.md` item 18) — the server occasionally returns
+  an empty page mid-pagination even though `total` says more data exists,
+  and the original client code treated that as "done." Fixed in
+  `datagovin_client.py`'s `fetch_all()`. Not re-fetched in this pass since
+  the resolver already works well with the partial set (19,586 unique
+  pincodes, a plausible national count) — re-running this connector would
+  now get the true complete set if/when it matters.
 
 ### Non-API sources (no resource ID; record access method instead)
 

@@ -401,6 +401,140 @@ status here is worse than no status file at all.
       (`total - services`, not a directly-sourced manufacturing figure — no
       Udyam manufacturing-specific resource exists; documented in code).
 
+16. **MCA national sweep launched** (`pipeline/flows/mca_national_sweep.py`),
+    running in the background while the work below happened in parallel.
+    Before committing to a multi-hour run, verified the exact
+    `CompanyStateCode` filter string for all 36 states directly against the
+    API rather than guessing (`pipeline/flows/verify_state_codes*.py`) —
+    5 states needed non-obvious values: `Odisha -> "orissa"`,
+    `Puducherry -> "pondicherry"`, `Jammu And Kashmir -> "jammu & kashmir"`
+    (ampersand), and the merged Dadra/Daman/Diu UT needs **two** separate
+    filter values (`"dadra & nagar haveli"` and `"daman and diu"` — the 2020
+    merger isn't reflected in this source's own state field).
+
+    **Chhattisgarh is excluded from the sweep — a real, unresolved source
+    data-quality finding, not a filter-guessing failure.** Every other
+    state/UT's verified total sums to exactly 3,674,312; the true national
+    total (confirmed in Phase 0) is 3,674,314 — a gap of exactly 2, matching
+    the *only* Chhattisgarh-labelled rows found under any tested spelling.
+    For a 29M-population state that should have tens of thousands of
+    registered companies. Checked whether they're mislabeled under Madhya
+    Pradesh (Chhattisgarh split from MP in 2000, the most likely place for
+    stale data to land) in a 50-row sample — not found there either.
+    **Genuinely unresolved; needs a dedicated investigation, not a guess.**
+    See `pipeline/connectors/mca_state_codes.py` for the full verified
+    mapping and reasoning.
+
+    `mca_national_sweep.py` catches and logs each state's failure
+    individually rather than aborting the whole run, and checkpoints per-
+    state (via the existing `mca.py` connector checkpoint) so an interrupted
+    sweep resumes rather than restarting from zero — verified this for real
+    when an early nohup-detached launch had to be killed and relaunched
+    properly through the harness's tracked background execution: Andaman
+    (already complete) stayed done, Andhra Pradesh resumed from its
+    checkpoint's `last_offset` instead of re-fetching from page 0.
+
+17. **The 5 validation gates wired up** (`pipeline/quality/gates.py`), run
+    against real loaded data while the MCA sweep ran in parallel (chosen
+    specifically because it's non-API work and wouldn't compete for the
+    rate-limited budget):
+
+    - **Gate 1 (Ingestion)**: already enforced inline in `DataGovInClient`
+      (status-code handling, empty-body loop termination) — there's nothing
+      left to check once a response is already parsed into records.
+      `validate_ingestion_response()` exists for connectors that want an
+      explicit auditable check anyway.
+    - **Gate 2 (Schema)**: found a real problem in the *documented example
+      schema itself* — `docs/09-DATA-QUALITY.md`'s illustrative Pandera
+      schema assumes CIN is always 21 characters. Checked against real
+      loaded data: **~27% of rows don't match** (183,642 at 21 chars,
+      19,784 at 8 chars, 69 at 6 chars). Investigated rather than
+      shrugging it off: the 8-char rows are **19,529/19,784 confirmed LLPs**
+      by company name (LLPIN, a genuinely different ID format, not a CIN at
+      all) and the 6-char `Fnnnnn`-prefixed rows are **foreign companies**
+      (spot-checked: Baker Hughes Energy Technology UK, Cameco India,
+      Hyundai Architects & Engineers Assoc. — all foreign entities, format
+      is MCA's Foreign Company Registration Number). Three legitimate ID
+      schemes coexist in one field; not a data problem, a documentation
+      problem. Fixed `pipeline/schemas/mca.py`'s Pandera schema to validate
+      against the real 3-length set instead of assuming CIN's textbook
+      format, and documented why in the schema file itself.
+    - **Gate 3 (Business rules)** — run for real, not just built:
+      `incorporation_date <= today`: **0 violations**.
+      `msme_micro+small+medium == msme_manufacturing+services`: **0
+      violations** (validates the earlier Udyam manufacturing-derivation
+      arithmetic is internally consistent).
+      `paid_up_capital <= authorized_capital`: **87 violations** out of
+      ~95K+ company rows (~0.09%) — spot-checked several, all plausible:
+      companies whose authorized capital was later increased but the
+      source snapshot hasn't caught up, a known, real-world MCA data lag,
+      not a pipeline bug. Logged to `meta.quality_event`, not silently
+      dropped; **not yet wired to set a `quality_flags` bit on the
+      offending `fact_company` rows** — flagged as a follow-up, not done
+      live while the MCA sweep was mid-flight to avoid a concurrent-write
+      risk with a transform script actively running.
+    - **Gate 4 (Referential)** — **0 orphans across all 5 checked FK
+      relationships** (`fact_company` → `dim_geography`/`dim_company_status`,
+      `fact_district_month` → `dim_geography`/`dim_date`/`dim_industry`).
+      Confirms the "nothing reaches gold unresolved" design principle is
+      holding in practice, not just in intent.
+    - **Gate 5 (Statistical)** — built (row-count-vs-trailing-average check,
+      the MCA snapshot <95%-of-prior gate), but **not yet meaningfully
+      exercised**: both need at least 2 historical snapshots per source to
+      compare against, and most sources only have one so far (this is
+      Phase 2's first national pass). The code returns "insufficient
+      history, not evaluated" rather than a false pass — documented, not
+      silently skipped.
+
+18. **A serious pagination bug found live during the sweep — the most
+    important bug in this project so far.** Delhi's sweep entry "completed
+    successfully" at 203,000 rows loaded, no error. Looked wrong on sight
+    (Delhi's verified total was 507,637 — a 60% shortfall) and was
+    investigated immediately rather than trusted.
+
+    **Root cause**: the server is occasionally flaky at deep pagination
+    offsets and returns HTTP 200 with an **empty records list** even though
+    `total` says far more data exists. Confirmed this is transient, not a
+    fixed depth ceiling — re-querying the *exact same* offset (203,000)
+    moments later worked normally. Both `fetch_state()` in `mca.py` and the
+    generic `fetch_all()` in `datagovin_client.py` had the same bug: they
+    treated *any* empty page as "reached the end of the data," with no check
+    against `total`. This silently truncated Delhi to 203,000/507,637 and
+    (caught in the same pass) **Gujarat to 12,000/222,915 — a 95% loss**.
+    Checked every other already-completed state against its Phase-2.5-
+    verified total: all matched exactly (Andaman, Andhra Pradesh, Arunachal
+    Pradesh, Assam, Chandigarh) — only the two deepest/largest fetches so
+    far were hit, consistent with transient flakiness being more likely to
+    strike across more pages, not a bug specific to those two states.
+
+    **This almost certainly retroactively explains the earlier Phase-1
+    pincode-directory shortfall** (165,627 of 184,740 rows, previously
+    written off in `docs/RESOURCE-REGISTRY.md` as "an observed data.gov.in
+    pagination quirk, not investigated further") — same failure signature,
+    smaller blast radius. Not re-fetching that resource in this pass, but
+    the note in the registry should be read as "same bug as the MCA
+    truncation, now understood and fixed" rather than an open mystery.
+
+    **Fix**: an empty page only means "done" if `len(records) >= total`.
+    Otherwise, retry the *same offset* with the standard exponential backoff
+    before giving up — and if it still comes back empty, **raise an error
+    instead of silently returning truncated data**. For `mca.py` specifically,
+    the checkpoint is now preserved (not deleted) when this happens, so a
+    raised error is resumable exactly like a network failure. Also fixed
+    `mca_silver.py`'s `transform_state()` to read **all** `part-*.parquet`
+    files in a state's bronze partition and concatenate them (dedup on CIN,
+    latest wins) rather than a hardcoded `part-000.parquet` — needed because
+    the corrected re-fetch writes an additional part rather than overwriting
+    bronze (bronze is immutable, rule 12; the flawed first capture stays on
+    disk as what was actually fetched at that time, exactly as intended).
+
+    **Recovery**: cleared the two truncated loads' stray quarantine rows,
+    re-fetching Delhi (full 507,637) and Gujarat (full 222,915) properly
+    with the fix in place before resuming the sweep from Haryana onward.
+    Every state fetched before this point was double-checked against its
+    verified total and confirmed NOT affected — this was caught and fixed
+    within the same sweep, not discovered after the fact.
+
 ---
 
 ## Environment notes for whoever runs this next
