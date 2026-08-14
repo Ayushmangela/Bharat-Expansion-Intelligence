@@ -3,6 +3,17 @@ import time
 import httpx
 from app.config import settings
 
+from pipeline.connectors.rate_limiter import TokenBucketLimiter
+
+# Process-wide shared limiter — matches docs/09-DATA-QUALITY.md's "token
+# bucket, 2 rps, max 4 concurrent" exactly. Shared across ALL DataGovInClient
+# instances (and therefore all threads using them) so the rate cap is
+# actually global, not per-instance.
+_shared_limiter = TokenBucketLimiter(
+    rate_per_second=settings.http_requests_per_second,
+    max_concurrent=settings.http_max_concurrency,
+)
+
 
 class DataGovInClient:
     """Thin, polite client for api.data.gov.in resources.
@@ -10,6 +21,11 @@ class DataGovInClient:
     Retry policy per docs/04-ETL-PIPELINE.md: retryable on 429/5xx/timeouts,
     exponential backoff capped at 60s, max settings.http_max_retries attempts.
     Not retryable: 4xx other than 429 -> fail fast.
+
+    Thread-safe: httpx.Client is documented safe for concurrent use across
+    threads, and the shared TokenBucketLimiter above serialises the actual
+    rate/concurrency ceiling. Callers may share one DataGovInClient instance
+    across a ThreadPoolExecutor.
     """
 
     def __init__(self) -> None:
@@ -68,7 +84,6 @@ class DataGovInClient:
                     )
 
             all_records.extend(records)
-            time.sleep(1.0 / settings.http_requests_per_second)
             if not records or len(all_records) >= total:
                 break
             offset += batch_size
@@ -92,7 +107,8 @@ class DataGovInClient:
         last_exc: Exception | None = None
         for attempt in range(settings.http_max_retries):
             try:
-                resp = self._client.get(f"/resource/{resource_id}", params=params)
+                with _shared_limiter:
+                    resp = self._client.get(f"/resource/{resource_id}", params=params)
                 if resp.status_code == 429 or resp.status_code >= 500:
                     raise httpx.HTTPStatusError("retryable", request=resp.request, response=resp)
                 resp.raise_for_status()
@@ -105,7 +121,6 @@ class DataGovInClient:
                 last_exc = e
             sleep_s = min(1 * (2**attempt), 60)
             time.sleep(sleep_s)
-            time.sleep(1.0 / settings.http_requests_per_second)
         raise RuntimeError(f"Exceeded retries fetching {resource_id}") from last_exc
 
     def close(self) -> None:

@@ -89,12 +89,18 @@ def transform_state(state_filter: str, ingest_date: date | None = None) -> dict:
     df = pd.concat([pd.read_parquet(p) for p in part_paths], ignore_index=True).fillna("")
     parquet_path = ";".join(str(p) for p in part_paths)
 
-    # Stage 3.1: schema validation — fails the run on violation, no silent coercion.
-    df = MCACompanyRawSchema.validate(df)
-
-    # Stage 3.2: dedup on natural key (CIN), latest wins (only one ingest here).
+    # Stage 3.2 BEFORE 3.1 here, deliberately: dedup on natural key (CIN)
+    # first, THEN validate schema. Found live re-transforming Delhi after
+    # the pagination-truncation fix — bronze legitimately contains multiple
+    # overlapping parts when a fetch was resumed/retried (part-000's rows
+    # are a genuine subset of part-001's complete capture), so the raw
+    # concatenation has duplicate CINs by design. Pandera's `unique=True`
+    # check on CIN correctly rejects that if run first; uniqueness is a
+    # property of the CLEANED dataset, not of raw bronze, so dedup has to
+    # come first when reading multiple parts.
     before = len(df)
     df = df.drop_duplicates(subset=["CIN"], keep="last")
+    df = MCACompanyRawSchema.validate(df)
     n_deduped = before - len(df)
 
     conn = get_conn()

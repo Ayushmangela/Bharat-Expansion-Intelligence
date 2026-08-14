@@ -16,7 +16,12 @@ from pipeline.connectors.mca import MCAConnector
 from pipeline.connectors.mca_state_codes import STATE_FILTER_VALUES
 from pipeline.transforms.mca_silver import transform_state
 
-ALREADY_LOADED = {"goa", "bihar"}  # filter values already fetched+transformed in Phase 1
+ALREADY_LOADED = {
+    "goa", "bihar",  # Phase 1
+    "andaman and nicobar islands", "andhra pradesh", "arunachal pradesh", "assam", "chandigarh",
+    "delhi", "gujarat",  # completed this sweep; delhi/gujarat re-verified against the pagination-truncation fix
+    "sikkim",  # fetched as a pre-sweep validation test
+}
 
 SUMMARY_PATH = "/tmp/mca_national_sweep_summary.json"
 

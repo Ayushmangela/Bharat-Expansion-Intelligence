@@ -535,6 +535,54 @@ status here is worse than no status file at all.
     verified total and confirmed NOT affected — this was caught and fixed
     within the same sweep, not discovered after the fact.
 
+19. **One more bug found recovering from the pagination fix**: re-running
+    `transform_state('delhi', ...)` against the corrected full bronze
+    capture failed Pandera's `unique=True` check on CIN — because
+    `part-000.parquet` (the truncated 203,000-row first attempt) and
+    `part-001.parquet` (the corrected full 507,637-row capture) legitimately
+    overlap by design (that's what a resumed/retried fetch produces), so the
+    raw concatenation has duplicate CINs. The pipeline order was schema-
+    validate-then-dedup (matching `docs/04-ETL-PIPELINE.md`'s documented
+    stage order), which is correct for a single bronze part but wrong once
+    multiple overlapping parts exist. **Fixed by swapping the order for this
+    case**: dedup on CIN first, then validate — uniqueness is a property of
+    the cleaned dataset, not of raw bronze, and multiple overlapping bronze
+    parts from a resume/retry are expected, not corrupted. Documented the
+    deviation from the doc's stage order directly in the code, not silently.
+
+20. **Built a minimal preview UI so the data is actually visible**, at the
+    user's request, ahead of the roadmap's own ordering (Phase 5 API / Phase
+    6 Frontend come after Phase 3 scoring and Phase 4 SHAP in
+    `docs/11-ROADMAP.md`, neither of which exist yet). This is explicitly a
+    **preview slice**, labelled as such on the pages themselves, not an
+    attempt at the real spec:
+    - **FastAPI backend** (`backend/app/{main,routers,services,repositories}`),
+      properly layered per `docs/02-ARCHITECTURE.md` (routers have no SQL,
+      services have no SQL, all SQL in `repositories/`) even though it's a
+      preview — no reason to skip a rule that's this cheap to follow.
+      3 endpoints: `/api/v1/overview`, `/api/v1/districts`,
+      `/api/v1/districts/{code}` — real company counts, status breakdowns,
+      MSME numbers, recent ingestion runs. None of `docs/07-API-SPEC.md`'s
+      score/rank/SHAP fields are present (nothing to serve yet); everything
+      returned is genuinely queryable right now.
+    - **Next.js 16 frontend** (`frontend/`, scaffolded via `create-next-app`
+      with TypeScript + Tailwind, matching the stack) — Overview, searchable
+      Districts list, District detail pages. Fixed one real bug immediately:
+      the default `create-next-app` template's `globals.css` had a
+      `prefers-color-scheme: dark` block that fought with the light-theme
+      Tailwind classes and made numbers unreadable — removed it in favor of
+      one consistent theme, appropriate for a data-dense BI tool.
+    - Both verified running against live data via the browser (not just
+      "it compiles") — real company counts, a real district detail page for
+      Patna showing its actual status breakdown and 24 months of
+      incorporation history.
+    - **Not done**: this bypasses TanStack Query/Zustand (not needed for
+      pure server-rendered reads yet — noted as an appropriate simplification
+      for a preview, revisit when Phase 6's interactive features, like live
+      weight sliders, actually need client-side state) and doesn't attempt
+      the SHAP waterfall or any scored/ranked view, since that data doesn't
+      exist. `.env.local` created for `NEXT_PUBLIC_API_URL`, gitignored.
+
 ---
 
 ## Environment notes for whoever runs this next
