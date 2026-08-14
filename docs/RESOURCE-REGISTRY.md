@@ -146,12 +146,22 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
 - Status: `PARTIAL`
 - **Population found, literacy/worker-classification not found in this session.**
 - Population (rural/urban by sex): `VERIFIED` —
-  Resource ID: `c9fee525-1c00-4ac2-969c-17bf42d2cc0a`, 707 rows.
-  Fields: `State Code`, `District Code`, `State`, `Districts`, plus
-  Total/Rural/Urban population × Male/Female.
-  **Important: `State Code`/`District Code` here are Census's own codes, not LGD**
-  (e.g. J&K is `"01"`; district rows carry `district_code: "NA"`). Must resolve
-  through `geography_alias`, exactly as rule 6 anticipates — never join directly.
+  Resource ID: `c9fee525-1c00-4ac2-969c-17bf42d2cc0a`, 707 rows (640 usable
+  district rows after excluding state/national aggregate rows — matches the
+  known Census 2011 district count).
+  **The `field` schema block advertises pretty names (`State Code`,
+  `District Code`, `Districts`) but actual records use snake_case keys
+  (`state_code`, `district_code`, `districts`, `population___total___2011`,
+  ...). Trust record keys, not the `field` block** — this cost a full debug
+  cycle in Phase 1 (0 rows loaded on first attempt) before being caught.
+  **Confirmed by direct testing: this resource's own "district code" is NOT
+  the same numbering as LGD's `district_census2011_code`.** Example:
+  Alappuzha is LGD district_census2011_code `598`, but this resource's own
+  code for Alappuzha is `11`. Two sources both calling a column "census 2011
+  code" does not mean the values are comparable — resolve by **normalised
+  district name, scoped by state**, through `GeographyResolver`, not by code
+  join. (Phase 1 used a direct name-dict join for the Goa checkpoint, ad hoc,
+  not yet routed through the resolver properly — see `STATUS.md` item 10.)
   Sample: `data/reference/samples/census_2011_population.json`.
 - Literacy rate (district-wise, all-India): `PENDING`. Found only state-level
   (`literates-and-literacy-rates-sex-census-2001-and-2011`,
@@ -164,6 +174,27 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
 - Worker classification (district-wise, all-India): `PENDING` — not attempted yet
   this session.
 - **Tag everything from this source with vintage = 2011.**
+
+### S_PINCODE_DIR — All India Pincode Directory (added in Phase 1, not Phase 0)
+- Catalog: https://www.data.gov.in/catalog/all-india-pincode-directory
+- Status: `VERIFIED`
+- Resource ID: `5c2f62fe-5afa-4119-a499-fec9d604d5bd`
+- Publisher: Department of Posts
+- **Why this was added after Phase 0 closed:** the documented resolver design
+  (LGD local-body PIN join) only resolved ~60% of PIN codes to a district —
+  most PINs map to sub-district local bodies, not District Panchayat
+  entities. This resource has a direct `pincode → district` TEXT field
+  (district names in caps, e.g. `"NORTH GOA"`) intended for exactly this
+  purpose, and pushed MCA geography resolution from 76% to 95.57% on the
+  Phase 1 Goa checkpoint. See `STATUS.md` for the full story.
+- Fields: `circlename`, `regionname`, `divisionname`, `officename`, `pincode`,
+  `officetype`, `delivery`, `district`, `statename`, `latitude`, `longitude`
+- Total rows: reported `184,740`; **only 165,627 actually came back** across
+  full pagination (~19,000-row gap) — a page returned empty before offset
+  reached the reported total. Not investigated further; noted as an observed
+  data.gov.in pagination quirk, not assumed to be a client bug (client-side
+  retry/pagination logic verified correct against total in other resources).
+  Resolves to 19,586 unique pincodes after loading (plausible national count).
 
 ### Non-API sources (no resource ID; record access method instead)
 

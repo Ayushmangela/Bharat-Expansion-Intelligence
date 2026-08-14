@@ -16,7 +16,7 @@ status here is worse than no status file at all.
 | Phase | Status |
 |---|---|
 | Phase 0 — Resource discovery | ✅ Done, with 2 known gaps (see below) |
-| Phase 1 — Geography spine + one KPI | 🚧 In progress |
+| Phase 1 — Geography spine + one KPI | ✅ Core checkpoint met — see below for what's real vs. simplified |
 | Phase 2+ | Not started |
 
 ---
@@ -72,6 +72,173 @@ status here is worse than no status file at all.
    deferred, not silently dropped — they need a real follow-up discovery pass, not a
    guess.
 
+6. **Phase 1 built end-to-end for one state (Goa).** Full detail is in the code
+   itself (`backend/pipeline/`) — this is the summary of what's real and what
+   deviated from `docs/03-DATA-MODEL.md` / `docs/04-ETL-PIPELINE.md`:
+
+   - **Postgres 16 running locally via Docker** on host port **5433**, not 5432 —
+     an unrelated container (`cirp_postgres`, another project) already held 5432.
+     `docker-compose.yml` and `.env` both reflect 5433.
+   - **Alembic set up**, 4 migrations applied. Schema is a **Phase-1-scoped
+     subset** of the documented DDL: `meta.source`, `meta.ingestion_run`,
+     `meta.quality_event`, `gold.dim_geography`, `gold.dim_date`,
+     `gold.dim_industry`, `gold.dim_company_status`, `gold.fact_company`,
+     `silver.geography_alias`, `silver.geography_quarantine`. Deliberately
+     excluded: `dim_profile`, `dim_source`, `fact_district_month`,
+     `fact_state_month`, `fact_state_annual`, `fact_opportunity_score`,
+     `fact_score_contribution`, `meta.weight_version` — Phase 2/3 concerns,
+     nothing to populate them yet.
+   - **`gold.dim_geography` got two extra columns** not in the original DDL:
+     `state_census2011_code`, `district_census2011_code` (from LGD). This was
+     meant to be the crosswalk key to Census data, but **turned out not to
+     work** — see the census code-mismatch finding below. The columns are
+     harmless and stay populated from LGD, but don't assume they crosswalk to
+     every census-labeled field in other sources.
+   - **Three new tables not in the original DDL**, all in `silver`, all
+     reference/crosswalk tables rather than star-schema objects:
+     `lgd_pincode_lookup`, `lgd_subdistrict_lookup`, `pincode_district_lookup`,
+     plus `census_population_district` (added via a later migration). These
+     exist because the documented resolver design (LGD PIN join alone) turned
+     out to be insufficient — see the resolution-rate story below.
+   - **LGD loaded**: 36 states, 785 districts (not ~750 — LGD is a living
+     directory, districts get added), 7,151 sub-districts, 7,411 local-body PIN
+     rows, all SCD-2 `valid_from`-dated and idempotent (re-running the loader
+     produces identical counts, verified).
+   - **`dim_date` populated**: 216 months, 2010–2027, calendar + Indian fiscal
+     year (Apr–Mar).
+   - **Geography resolver**: implemented all six steps from
+     `docs/04-ETL-PIPELINE.md`, plus two steps the docs didn't anticipate
+     (below). Learns fuzzy matches into `geography_alias` automatically
+     (Step 5's stated behavior).
+   - **MCA loaded for Goa** (not "one RoC" as the roadmap says — MCA is no
+     longer split by RoC, see Phase 0 notes — filtered by `CompanyStateCode`
+     instead, which serves "one state end to end" more directly): 15,684
+     companies fetched and landed in bronze, checkpointed/resumable.
+   - **Census 2011 population loaded**: 640 districts (matches the known
+     Census 2011 district count).
+   - **Business Formation Rate computed for Goa, both districts, every month
+     with data** — real, non-null, directionally sane numbers (e.g. North Goa
+     May 2026: 83 new incorporations / 818,008 pop = 10.15 per 100k; South Goa
+     same month: 34 / 640,537 = 5.31 per 100k — North Goa is the more
+     commercial/urbanized district, consistent with the higher rate).
+     **This is a proxy, not the KPI as formally defined**: the formula calls
+     for *working-age* population, but Census 2011 literacy/worker-
+     classification tables were never found in Phase 0 (still `PENDING`).
+     Total population 2011 is used instead. Labelled as a proxy in the output,
+     not silently substituted.
+   - **Final geography resolution rate: 95.57%** (14,989 / 15,684 resolved),
+     above the roadmap's explicit ≥90% gate and above the ≥95% named / ≥85%
+     PIN-derived targets from `docs/04-ETL-PIPELINE.md`. This did NOT happen
+     on the first pass — see below.
+
+7. **The resolution-rate story, since it's the most important thing that
+   happened in Phase 1.** First pass, using only what the docs specified
+   (state exact/alias match, district exact/alias match, LGD PIN join,
+   pg_trgm fuzzy): **69.35%**. Investigated the failures directly (real MCA
+   addresses in `silver.geography_quarantine`) rather than lowering the bar:
+
+   - Most failures were real addresses like "PANAJI,Goa,India-403001" or
+     "VASCO-DA-GAMA,Goa" — **city/taluka names, not district names**, and
+     Goa's LGD districts are named "North Goa"/"South Goa", which never
+     appear verbatim in an address. Added **Step 4c**: match a known
+     *sub-district* (taluka) name in the address text, then map up to its
+     parent district via LGD's own sub-district table. → **76.03%**.
+   - Remaining failures were mostly city names like "Panaji" and
+     "Vasco-da-Gama" that are neither district nor taluka names — but they
+     had valid PIN codes. The documented LGD-PIN-join path only resolves
+     PINs whose local body is *itself* a District Panchayat entity (~60% of
+     PINs). Discovered and loaded a much better source: the **Dept of Posts'
+     "All India Pincode Directory"** (`5c2f62fe-5afa-4119-a499-fec9d604d5bd`,
+     not in the original registry — added it), which has a direct
+     `pincode → district` text field. → **95.57%**.
+
+   This is the concrete version of what `docs/11-ROADMAP.md` warned about
+   ("do it first while you have the most patience") — the documented design
+   was a reasonable starting point but needed two real iterations against
+   real data before it worked. Both fixes are now permanent parts of the
+   resolver, not one-off patches for Goa.
+
+8. **Two real bugs found and fixed along the way, not just design gaps:**
+   - **No politeness delay on successful API pages.** `DataGovInClient` only
+     slept between *retries*, never between successful sequential pages. This
+     is why a routine LGD + Goa-MCA load tripped data.gov.in's rate limiter
+     mid-session (confirmed via curl: 429 "Rate limit exceeded" on every
+     resource, recovered after ~20s — a burst limit, not a daily quota, but
+     still a real politeness violation of CLAUDE.md rule 18). Fixed in both
+     `datagovin_client.py` and `mca.py`'s manual pagination loop.
+     `HTTP_REQUESTS_PER_SECOND` in `.env` was also lowered from 2 to 0.7
+     afterward, since 2 req/s still weren't enough headroom.
+   - **Bronze parquet write crashed on mixed-type columns.** Census's
+     `population___total___2011` field mixes numeric values and the literal
+     string `"NA"` in the same column; `pd.DataFrame.from_records(...).to_parquet()`
+     let pyarrow infer types and it choked. Fixed by casting every column to
+     string before writing bronze (`base.py`) — bronze is supposed to be raw
+     verbatim storage anyway, typing belongs in the silver transform, not here.
+
+9. **A second confirmed instance of the "schema block lies about record
+   keys" pattern first seen in LGD local bodies (Phase 0).** The Census
+   population resource's `field` metadata advertises pretty names like
+   `"State Code"`, but actual records use snake_case keys (`state_code`).
+   Cost an entire debugging cycle (0 rows loaded on first attempt) before
+   being caught. **Lesson for future connectors: always print one raw record
+   and read keys off it directly — never trust the `field` block's naming.**
+
+10. **Census code crosswalk assumption was wrong — found and fixed.** The
+    original plan (baked into the `dim_geography` migration) was to crosswalk
+    Census population data via `state_census2011_code`/`district_census2011_code`
+    columns carried on both LGD and the Census resource. **These turned out to
+    be two different numbering schemes that happen to share a column name.**
+    Confirmed directly: LGD's `district_census2011_code` for Alappuzha is
+    `598`; the population resource's own code for Alappuzha is `11`. Fixed
+    `compute_bfr.py` to join on **normalised district name, scoped by state**,
+    instead — which worked cleanly for Goa. This is not yet proven to
+    generalize to ambiguous-name districts nationally (Aurangabad, Bilaspur,
+    etc.) — that's exactly what the resolver's alias/fuzzy machinery exists
+    for, but it hasn't been run against the full Census population table yet,
+    only used ad hoc in `compute_bfr.py`. **Flagging as a Phase 2 TODO**:
+    route the Census population join through `GeographyResolver` properly
+    instead of the direct name-dict lookup used for the Goa checkpoint.
+
+11. **Idempotency bug found and fixed — this one is important.** After the
+    Phase 1 checkpoint looked done, ran the roadmap's own required check
+    ("run twice, assert no duplicates" — `docs/11-ROADMAP.md` Phase 2 DoD,
+    pulled forward as a sanity check). It failed: `gold.dim_geography`
+    grew by 36 rows (an exact state-count multiple) on every re-run.
+    **Root cause: Postgres treats NULL as distinct from NULL in UNIQUE
+    constraints.** State-grain rows carry `lgd_district_code = NULL`, so
+    `ON CONFLICT (lgd_state_code, lgd_district_code, valid_from)` never
+    matched them against each other — every re-run silently inserted 36 more
+    "duplicate" states. District rows were never affected (their
+    `lgd_district_code` is always non-null). The exact same pattern had
+    already independently corrupted `silver.geography_alias` (7 duplicated
+    state-only aliases, e.g. `Orissa -> Odisha` with `observed_district = NULL`).
+    **Fixed**: migration `d77835febaad` deduplicates existing damage, drops
+    both NULL-unsafe UNIQUE constraints, and replaces them with
+    `COALESCE(..., sentinel)`-based unique indexes; `lgd.py`, `seed_aliases.py`,
+    and the resolver's `_learn_alias` all updated to target the new indexes.
+    **Verified idempotent by running both loaders twice in a row and
+    confirming identical row counts both times** (36 states / 785 districts /
+    11 aliases, unchanged). This is exactly the kind of thing rule 15 exists
+    to catch, and it would have silently corrupted every downstream count
+    (district counts, resolution rates, everything) on the very first
+    scheduled monthly re-run in production.
+
+12. **One more outlier found via the same route**: `compute_bfr.py`'s first
+    real output showed a company with `incorporation_date = 1111-01-01` — an
+    obvious data-entry error skewing monthly bucketing. Per rule 4 (never
+    delete outliers, flag them), added an epoch-plausibility check
+    (`1858-01-01` to today — the British Companies Act 1857 predates
+    anything genuinely registrable) to `mca_silver.py`, setting
+    `quality_flags` bit 2 (`QUALITY_BIT_OUTLIER`) rather than dropping the
+    row. `compute_bfr.py` excludes outlier-flagged rows from the KPI
+    aggregation while the row stays in `fact_company` for audit. Only 1 row
+    out of 14,989 hit this. **Known remaining gap, not chased further given
+    low materiality**: a handful of 1949–1963 incorporation dates for Goa
+    are still technically implausible (Goa was Portuguese territory until
+    1961 and didn't join India until then), but a state-specific liberation-
+    date check felt like over-fitting to one state rather than a general
+    rule — flagging for whoever tackles the full national sweep.
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -96,11 +263,21 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Per `docs/11-ROADMAP.md` Phase 1: Postgres up via `docker-compose.yml`, Alembic
-initialised, `meta`/`silver`/`gold` schemas created, LGD connector loading
-`dim_geography` as SCD-2, `geography_alias` seeded, six-step resolver implemented and
-tested, `dim_date` populated, MCA connector for one RoC/subset landing in bronze,
-Pandera schema + silver transform + PIN→district resolution, and a Business Formation
-Rate computed for one state end to end — done when resolution rate is measured and
-≥90% (roadmap's explicit gate; do not proceed past Phase 1 below that without fixing
-the resolver first).
+Phase 1's core checkpoint is met for one state (Goa, 95.57% resolution). Before
+calling Phase 1 fully done and moving to Phase 2 (full ingestion), worth deciding:
+
+1. **Scale the resolver check to a second, harder state** before trusting 95.57% as
+   representative — Goa has only 2 districts and clean addresses relative to,
+   say, Uttar Pradesh (75 districts, several ambiguous names). Recommend testing
+   against a state with a genuinely ambiguous district name (Bihar or Maharashtra,
+   both contain an "Aurangabad") before declaring the resolver production-ready.
+2. **Route the Census population join through `GeographyResolver`** instead of the
+   direct normalised-name dict used in `compute_bfr.py` (see item 10 above) — the
+   ad hoc version worked for Goa but hasn't been proven against ambiguous names.
+3. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
+   (Census literacy/worker-classification, CEA) before or after Phase 2.
+4. Phase 2 proper: MCA sweep across ALL states (~3.67M rows, checkpointed/resumable
+   — the connector already supports this per-state, just needs to loop all states),
+   Udyam connector + snapshot-diff, all five validation gates wired,
+   `meta.ingestion_run` populated on every load (already true), idempotency
+   re-verified at full scale.

@@ -23,6 +23,9 @@ frontend/.vercel/
 # Data — bronze is immutable and gitignored; reference/ is committed
 data/bronze/
 data/manifests/
+**/data/bronze/
+**/data/checkpoints/
+backend/data/
 
 # OS
 .DS_Store

@@ -19,6 +19,13 @@ UDYAM_DISTRICT_SERVICES = "c3dfe7e6-0cfd-4ddb-8f79-9cb3695d9866"
 # pointing at startupindia.gov.in with no documented public API found so far.
 DPIIT_STARTUPS: str | None = None
 
+# --- All India Pincode Directory (Dept of Posts) ---
+# Added mid-Phase-1 after the resolver checkpoint showed LGD's local-body PIN
+# join only resolves ~60% of PIN codes to a district directly (most PINs map
+# to sub-district local bodies, not District Panchayats). This resource has
+# a clean pincode -> district field intended for exactly this purpose.
+ALL_INDIA_PINCODE_DIRECTORY = "5c2f62fe-5afa-4119-a499-fec9d604d5bd"
+
 # --- S07/S09: Local Government Directory (LGD) — load first, everything joins to it ---
 LGD_STATES = "a71e60f0-a21d-43de-a6c5-fa5d21600cdb"
 LGD_DISTRICTS = "37231365-78ba-44d5-ac22-3deec40b9197"

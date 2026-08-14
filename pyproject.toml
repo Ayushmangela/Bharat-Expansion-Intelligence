@@ -31,8 +31,14 @@ dev = [
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+# DTZ: this project uses naive local dates for bronze ingest-date partitioning
+# and calendar bookkeeping (dim_date, ingest_date), never for elapsed-time
+# measurement — timezone-aware datetimes would be noise here, not a bug.
+ignore = ["DTZ007", "DTZ011"]
+
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = true
 
 [build-system]
