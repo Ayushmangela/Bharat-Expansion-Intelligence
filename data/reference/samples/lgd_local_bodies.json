@@ -1,0 +1,207 @@
+{
+    "index_name": "1a6c26ed-d67c-40ea-aa20-d38d35f341a5",
+    "title": "Local Government Directory (LGD) - Local Bodies",
+    "desc": "Local Government Directory (LGD) - Local Bodies",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Panchayati Raj"
+    ],
+    "sector": [
+        "Panchayati Raj"
+    ],
+    "source": "data.gov.in",
+    "catalog_uuid": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+    "visualizable": "1",
+    "active": "1",
+    "created": 1675425572,
+    "updated": 1786687371,
+    "created_date": "2023-02-03T12:59:32Z",
+    "updated_date": "2026-08-14T06:02:51Z",
+    "external_ws": 0,
+    "external_ws_url": "",
+    "target_bucket": {
+        "index": "lgd",
+        "type": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+        "field": "1a6c26ed-d67c-40ea-aa20-d38d35f341a5"
+    },
+    "field": [
+        {
+            "name": "\"stateCode\"",
+            "id": "stateCode",
+            "type": "keyword"
+        },
+        {
+            "name": "stateNameEnglish",
+            "id": "stateNameEnglish",
+            "type": "keyword"
+        },
+        {
+            "name": "stateNameLocal",
+            "id": "stateNameLocal",
+            "type": "keyword"
+        },
+        {
+            "name": "stateCensus2011Code",
+            "id": "stateCensus2011Code",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyCode",
+            "id": "localBodyCode",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyNameEnglish",
+            "id": "localBodyNameEnglish",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyNameLocal",
+            "id": "localBodyNameLocal",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyCensus2011Code",
+            "id": "localBodyCensus2011Code",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyTypeCode",
+            "id": "localBodyTypeCode",
+            "type": "keyword"
+        },
+        {
+            "name": "localBodyTypeName",
+            "id": "localBodyTypeName",
+            "type": "keyword"
+        },
+        {
+            "name": "coverage_entityCode",
+            "id": "entityCode",
+            "type": "keyword"
+        },
+        {
+            "name": "coverage_entityName",
+            "id": "entityName",
+            "type": "keyword"
+        },
+        {
+            "name": "coverage_entityType",
+            "id": "entityType",
+            "type": "keyword"
+        },
+        {
+            "name": "coverage_coverageType",
+            "id": "coverageType",
+            "type": "keyword"
+        },
+        {
+            "name": "last_updated",
+            "id": "date_updated",
+            "type": "date"
+        }
+    ],
+    "field_exposed": [
+        {
+            "name": "State Name",
+            "id": "stateNameEnglish",
+            "type": "keyword",
+            "mandatory": true
+        }
+    ],
+    "field_dependent": [],
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 353197,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "stateCode": 1,
+            "stateNameEnglish": "Jammu And Kashmir",
+            "stateNameLocal": "JAMMU AND KASHMIR",
+            "stateCensus2011Code": "01",
+            "localBodyCode": 1,
+            "localBodyNameEnglish": "Anantnag",
+            "localBodyNameLocal": "ANANTNAG",
+            "localBodyCensus2011Code": "000000",
+            "localBodyTypeCode": "1",
+            "localBodyTypeName": "District Panchayat  ",
+            "entityCode": 1,
+            "entityName": "Anantnag",
+            "entityType": "District",
+            "coverageType": "Partial",
+            "date_updated": "2026-04-21 06:00:11"
+        },
+        {
+            "stateCode": 1,
+            "stateNameEnglish": "Jammu And Kashmir",
+            "stateNameLocal": "JAMMU AND KASHMIR",
+            "stateCensus2011Code": "01",
+            "localBodyCode": 2,
+            "localBodyNameEnglish": "Badgam",
+            "localBodyNameLocal": "BADGAM",
+            "localBodyCensus2011Code": "000000",
+            "localBodyTypeCode": "1",
+            "localBodyTypeName": "District Panchayat  ",
+            "entityCode": 2,
+            "entityName": "Budgam",
+            "entityType": "District",
+            "coverageType": "Partial",
+            "date_updated": "2026-04-21 06:00:11"
+        },
+        {
+            "stateCode": 1,
+            "stateNameEnglish": "Jammu And Kashmir",
+            "stateNameLocal": "JAMMU AND KASHMIR",
+            "stateCensus2011Code": "01",
+            "localBodyCode": 567,
+            "localBodyNameEnglish": "Bandipora",
+            "localBodyNameLocal": "BANDIPORA",
+            "localBodyCensus2011Code": "000000",
+            "localBodyTypeCode": "1",
+            "localBodyTypeName": "District Panchayat  ",
+            "entityCode": 623,
+            "entityName": "Bandipora",
+            "entityType": "District",
+            "coverageType": "Partial",
+            "date_updated": "2026-04-21 06:00:11"
+        },
+        {
+            "stateCode": 1,
+            "stateNameEnglish": "Jammu And Kashmir",
+            "stateNameLocal": "JAMMU AND KASHMIR",
+            "stateCensus2011Code": "01",
+            "localBodyCode": 3,
+            "localBodyNameEnglish": "Baramulla",
+            "localBodyNameLocal": "BARAMULLA",
+            "localBodyCensus2011Code": "000000",
+            "localBodyTypeCode": "1",
+            "localBodyTypeName": "District Panchayat  ",
+            "entityCode": 3,
+            "entityName": "Baramulla",
+            "entityType": "District",
+            "coverageType": "Partial",
+            "date_updated": "2026-04-21 06:00:11"
+        },
+        {
+            "stateCode": 1,
+            "stateNameEnglish": "Jammu And Kashmir",
+            "stateNameLocal": "JAMMU AND KASHMIR",
+            "stateCensus2011Code": "01",
+            "localBodyCode": 4,
+            "localBodyNameEnglish": "Doda",
+            "localBodyNameLocal": "DODA",
+            "localBodyCensus2011Code": "000000",
+            "localBodyTypeCode": "1",
+            "localBodyTypeName": "District Panchayat  ",
+            "entityCode": 4,
+            "entityName": "Doda",
+            "entityType": "District",
+            "coverageType": "Partial",
+            "date_updated": "2026-04-21 06:00:11"
+        }
+    ]
+}

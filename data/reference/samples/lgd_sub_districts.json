@@ -1,0 +1,176 @@
+{
+    "index_name": "6be51a29-876a-403a-a6da-42fde795e751",
+    "title": "Local Government Directory (LGD) - Sub-Districts",
+    "desc": "Local Government Directory (LGD) - Sub-Districts",
+    "created": "1658936105771",
+    "updated": 1786684368,
+    "created_date": "2022-07-27T21:05:08Z",
+    "updated_date": "2026-08-14T05:12:48Z",
+    "active": "1",
+    "visualizable": "1",
+    "catalog_uuid": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Panchayati Raj"
+    ],
+    "sector": [
+        "Panchayati Raj"
+    ],
+    "field": [
+        {
+            "name": "state_code",
+            "id": "state_code",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_english",
+            "id": "state_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_local",
+            "id": "state_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "state_census2011_code",
+            "id": "state_census2011_code",
+            "type": "keyword"
+        },
+        {
+            "name": "district_code",
+            "id": "district_code",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name_english",
+            "id": "district_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name_local",
+            "id": "district_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "district_census2011_code",
+            "id": "district_census2011_code",
+            "type": "keyword"
+        },
+        {
+            "name": "subdistrict_code",
+            "id": "subdistrict_code",
+            "type": "keyword"
+        },
+        {
+            "name": "subdistrict_name_english",
+            "id": "subdistrict_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "subdistrict_name_local",
+            "id": "subdistrict_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "subdistrict_census2011_code",
+            "id": "subdistrict_census2011_code",
+            "type": "keyword"
+        },
+        {
+            "name": "last_updated",
+            "id": "last_updated",
+            "type": "date"
+        }
+    ],
+    "target_bucket": {
+        "index": "lgd",
+        "type": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+        "field": "6be51a29-876a-403a-a6da-42fde795e751"
+    },
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 7151,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "state_code": 8,
+            "state_name_english": "Rajasthan",
+            "state_name_local": "RAJASTHAN                                         ",
+            "state_census2011_code": "08",
+            "district_code": 783,
+            "district_name_english": "Jaipur (Gramin)",
+            "district_name_local": "\u091c\u092f\u092a\u0941\u0930 (\u0917\u094d\u0930\u093e\u092e\u0940\u0923)",
+            "district_census2011_code": "NA",
+            "subdistrict_code": 7140,
+            "subdistrict_name_english": "Aandhi",
+            "subdistrict_name_local": "\u0906\u0902\u0927\u0940",
+            "subdistrict_census2011_code": "00000",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 24,
+            "state_name_english": "Gujarat",
+            "state_name_local": "GUJARAT                                           ",
+            "state_census2011_code": "24",
+            "district_code": 449,
+            "district_name_english": "Kachchh",
+            "district_name_local": "KACHCHH                                           ",
+            "district_census2011_code": "468",
+            "subdistrict_code": 3728,
+            "subdistrict_name_english": "Abdasa",
+            "subdistrict_name_local": "",
+            "subdistrict_census2011_code": "03728",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 22,
+            "state_name_english": "Chhattisgarh",
+            "state_name_local": "\u091b\u0924\u094d\u0924\u0940\u0938\u0917\u095d",
+            "state_census2011_code": "22",
+            "district_code": 387,
+            "district_name_english": "Raipur",
+            "district_name_local": "\u0930\u093e\u092f\u092a\u0941\u0930",
+            "district_census2011_code": "410",
+            "subdistrict_code": 3331,
+            "subdistrict_name_english": "Abhanpur",
+            "subdistrict_name_local": "",
+            "subdistrict_census2011_code": "03331",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 24,
+            "state_name_english": "Gujarat",
+            "state_name_local": "GUJARAT                                           ",
+            "state_census2011_code": "24",
+            "district_code": 459,
+            "district_name_english": "Surat",
+            "district_name_local": "SURAT                                             ",
+            "district_census2011_code": "492",
+            "subdistrict_code": 6518,
+            "subdistrict_name_english": "Adajan",
+            "subdistrict_name_local": "Adajan",
+            "subdistrict_census2011_code": "00000",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 21,
+            "state_name_english": "Odisha",
+            "state_name_local": "ODISHA",
+            "state_census2011_code": "21",
+            "district_code": 353,
+            "district_name_english": "Gajapati",
+            "district_name_local": "GAJAPATI                                          ",
+            "district_census2011_code": "389",
+            "subdistrict_code": 3100,
+            "subdistrict_name_english": "Adava",
+            "subdistrict_name_local": "",
+            "subdistrict_census2011_code": "03100",
+            "last_updated": "2024-10-07"
+        }
+    ]
+}

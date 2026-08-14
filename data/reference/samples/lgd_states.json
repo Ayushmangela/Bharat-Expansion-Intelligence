@@ -1,0 +1,106 @@
+{
+    "index_name": "a71e60f0-a21d-43de-a6c5-fa5d21600cdb",
+    "title": "Local Government Directory (LGD) - States",
+    "desc": "Local Government Directory (LGD) - States",
+    "created": "1658835055890",
+    "updated": 1786684363,
+    "created_date": "2022-07-26T17:00:56Z",
+    "updated_date": "2026-08-14T05:12:43Z",
+    "active": "1",
+    "visualizable": "1",
+    "catalog_uuid": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Panchayati Raj"
+    ],
+    "sector": [
+        "Panchayati Raj"
+    ],
+    "field": [
+        {
+            "name": "state_code",
+            "id": "state_code",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_english",
+            "id": "state_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_local",
+            "id": "state_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "state_census2011_code",
+            "id": "state_census2011_code",
+            "type": "keyword"
+        },
+        {
+            "name": "state_or_ut",
+            "id": "state_or_ut",
+            "type": "keyword"
+        },
+        {
+            "name": "last_updated",
+            "id": "last_updated",
+            "type": "date"
+        }
+    ],
+    "target_bucket": {
+        "index": "lgd",
+        "type": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+        "field": "a71e60f0-a21d-43de-a6c5-fa5d21600cdb"
+    },
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 36,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "state_code": 12,
+            "state_name_english": "Arunachal Pradesh",
+            "state_name_local": "ARUNACHAL PRADESH                                 ",
+            "state_census2011_code": "12",
+            "state_or_ut": "S",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 2,
+            "state_name_english": "Himachal Pradesh",
+            "state_name_local": "HIMACHAL PRADESH                                  ",
+            "state_census2011_code": "02",
+            "state_or_ut": "S",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 23,
+            "state_name_english": "Madhya Pradesh",
+            "state_name_local": "MADHYA PRADESH                                    ",
+            "state_census2011_code": "23",
+            "state_or_ut": "S",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 27,
+            "state_name_english": "Maharashtra",
+            "state_name_local": "\u092e\u0939\u093e\u0930\u093e\u0937\u094d\u091f\u094d\u0930",
+            "state_census2011_code": "27",
+            "state_or_ut": "S",
+            "last_updated": "2024-10-07"
+        },
+        {
+            "state_code": 34,
+            "state_name_english": "Puducherry",
+            "state_name_local": "PUDUCHERRY",
+            "state_census2011_code": "34",
+            "state_or_ut": "U",
+            "last_updated": "2024-10-07"
+        }
+    ]
+}

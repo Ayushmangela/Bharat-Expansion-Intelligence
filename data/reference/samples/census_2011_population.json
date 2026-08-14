@@ -1,0 +1,151 @@
+{
+    "index_name": "c9fee525-1c00-4ac2-969c-17bf42d2cc0a",
+    "title": "District-wise Rural Urban Population by Sex - Census 2011",
+    "desc": "District-wise Rural Urban Population by Sex - Census 2011",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Health and Family Welfare",
+        "Department of Health and Family Welfare"
+    ],
+    "sector": [
+        "Health and Family welfare",
+        "Health",
+        "Family Welfare"
+    ],
+    "source": "data.gov.in",
+    "catalog_uuid": "d9ec4ae5-6144-4daa-8d33-7cf8976fb209",
+    "visualizable": "0",
+    "active": "1",
+    "created": 1614573535,
+    "updated": 1614574345,
+    "created_date": "2021-03-01T04:38:55Z",
+    "updated_date": "2021-03-01T10:22:25Z",
+    "external_ws": 0,
+    "external_ws_url": "",
+    "target_bucket": {
+        "index": "mohfw",
+        "type": "d9ec4ae5-6144-4daa-8d33-7cf8976fb209",
+        "field": "c9fee525-1c00-4ac2-969c-17bf42d2cc0a"
+    },
+    "field": [
+        {
+            "id": "state_code",
+            "name": "State Code",
+            "type": "keyword"
+        },
+        {
+            "id": "district_code",
+            "name": "District Code",
+            "type": "keyword"
+        },
+        {
+            "id": "state",
+            "name": "State",
+            "type": "keyword"
+        },
+        {
+            "id": "districts",
+            "name": "Districts",
+            "type": "keyword"
+        },
+        {
+            "id": "population___total___2011",
+            "name": "Population - Total - 2011",
+            "type": "double"
+        },
+        {
+            "id": "population___rural___2011",
+            "name": "Population - Rural - 2011",
+            "type": "double"
+        },
+        {
+            "id": "population___urban___2011",
+            "name": "Population - Urban - 2011",
+            "type": "double"
+        },
+        {
+            "id": "male___total___2011",
+            "name": "Male - Total - 2011",
+            "type": "double"
+        },
+        {
+            "id": "male___rural___2011",
+            "name": "Male - Rural - 2011",
+            "type": "double"
+        },
+        {
+            "id": "male___urban___2011",
+            "name": "Male - Urban - 2011",
+            "type": "double"
+        },
+        {
+            "id": "female___total___2011",
+            "name": "Female - Total - 2011",
+            "type": "double"
+        },
+        {
+            "id": "female___rural___2011",
+            "name": "Female - Rural - 2011",
+            "type": "double"
+        },
+        {
+            "id": "female___urban___2011",
+            "name": "Female - Urban - 2011",
+            "type": "double"
+        }
+    ],
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 707,
+    "count": 3,
+    "limit": "3",
+    "offset": "0",
+    "records": [
+        {
+            "state_code": "INDIA",
+            "district_code": "INDIA",
+            "state": "INDIA",
+            "districts": "INDIA",
+            "population___total___2011": 1210854977,
+            "population___rural___2011": 833748852,
+            "population___urban___2011": 377106125,
+            "male___total___2011": 623270258,
+            "male___rural___2011": 427781058,
+            "male___urban___2011": 195489200,
+            "female___total___2011": 587584719,
+            "female___rural___2011": 405967794,
+            "female___urban___2011": 181616925
+        },
+        {
+            "state_code": "01",
+            "district_code": "NA",
+            "state": "JAMMU & KASHMIR",
+            "districts": "STATE",
+            "population___total___2011": 12541302,
+            "population___rural___2011": 9108060,
+            "population___urban___2011": 3433242,
+            "male___total___2011": 6640662,
+            "male___rural___2011": 4774477,
+            "male___urban___2011": 1866185,
+            "female___total___2011": 5900640,
+            "female___rural___2011": 4333583,
+            "female___urban___2011": 1567057
+        },
+        {
+            "state_code": "01",
+            "district_code": "01",
+            "state": "JAMMU & KASHMIR",
+            "districts": "Kupwara",
+            "population___total___2011": 870354,
+            "population___rural___2011": 765625,
+            "population___urban___2011": 104729,
+            "male___total___2011": 474190,
+            "male___rural___2011": 412038,
+            "male___urban___2011": 62152,
+            "female___total___2011": 396164,
+            "female___rural___2011": 353587,
+            "female___urban___2011": 42577
+        }
+    ]
+}

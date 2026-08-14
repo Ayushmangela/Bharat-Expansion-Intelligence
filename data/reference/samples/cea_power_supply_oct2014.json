@@ -1,0 +1,112 @@
+{
+    "created": 1495709693,
+    "updated": 1543532989,
+    "title": "Power Supply Position - October 2014",
+    "desc": "Power Supply Position - October 2014",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Power",
+        "Central Electricity Authority"
+    ],
+    "sector": [
+        "Power and Energy"
+    ],
+    "visualizable": "1",
+    "index_name": "59b6cf39-6093-4da7-b9c9-6fe68ecff587",
+    "catalog_uuid": "2aab3ff8-043a-4852-896c-cd36369bb006",
+    "status": "ok",
+    "field": [
+        {
+            "id": "state_region",
+            "name": "State/Region",
+            "type": "keyword"
+        },
+        {
+            "id": "october_2014_requirement__mu_",
+            "name": "October,2014-Requirement-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "october_2014_availability__mu_",
+            "name": "October,2014-Availability-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "october_2014_surplus_deficit_____mu_",
+            "name": "October,2014-Surplus / Deficit (-)-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "october_2014_surplus_deficit_____",
+            "name": "October,2014-Surplus / Deficit (-)-( % )",
+            "type": "double"
+        },
+        {
+            "id": "april_2014___october_2014_requirement__mu_",
+            "name": "April, 2014 -  October,2014-Requirement-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "april_2014___october_2014_availability__mu_",
+            "name": "April, 2014 -  October,2014-Availability-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "april_2014___october_2014_surplus_deficit_____mu_",
+            "name": "April, 2014 -  October,2014-Surplus / Deficit (-)-( MU )",
+            "type": "double"
+        },
+        {
+            "id": "april_2014___october_2014_surplus_deficit_____",
+            "name": "April, 2014 -  October,2014-Surplus / Deficit (-)-( % )",
+            "type": "double"
+        }
+    ],
+    "created_date": "2017-05-25T10:54:53Z",
+    "updated_date": "2018-11-30T04:39:49Z",
+    "active": "1",
+    "external_ws_url": "",
+    "external_ws": "0",
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "total": 43,
+    "count": 3,
+    "limit": "3",
+    "offset": "0",
+    "records": [
+        {
+            "state_region": "Chandigarh",
+            "october_2014_requirement__mu_": "119",
+            "october_2014_availability__mu_": "119",
+            "october_2014_surplus_deficit_____mu_": "0",
+            "october_2014_surplus_deficit_____": "0",
+            "april_2014___october_2014_requirement__mu_": "1077",
+            "april_2014___october_2014_availability__mu_": "1077",
+            "april_2014___october_2014_surplus_deficit_____mu_": "0",
+            "april_2014___october_2014_surplus_deficit_____": "0"
+        },
+        {
+            "state_region": "Delhi",
+            "october_2014_requirement__mu_": "2353",
+            "october_2014_availability__mu_": "2349",
+            "october_2014_surplus_deficit_____mu_": "-4",
+            "october_2014_surplus_deficit_____": "-0.2",
+            "april_2014___october_2014_requirement__mu_": "19844",
+            "april_2014___october_2014_availability__mu_": "19739",
+            "april_2014___october_2014_surplus_deficit_____mu_": "-105",
+            "april_2014___october_2014_surplus_deficit_____": "-0.5"
+        },
+        {
+            "state_region": "Haryana",
+            "october_2014_requirement__mu_": "3922",
+            "october_2014_availability__mu_": "3893",
+            "october_2014_surplus_deficit_____mu_": "-29",
+            "october_2014_surplus_deficit_____": "-0.7",
+            "april_2014___october_2014_requirement__mu_": "30237",
+            "april_2014___october_2014_availability__mu_": "30105",
+            "april_2014___october_2014_surplus_deficit_____mu_": "-132",
+            "april_2014___october_2014_surplus_deficit_____": "-0.4"
+        }
+    ]
+}

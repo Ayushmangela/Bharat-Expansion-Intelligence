@@ -1,0 +1,181 @@
+{
+    "created": 1495709716,
+    "updated": 1784708235,
+    "title": "Registrars of Companies (RoC)-wise Company Master Data",
+    "desc": "Registrars of Companies (RoC)-wise Company Master Data",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Corporate Affairs"
+    ],
+    "sector": [
+        "Companies"
+    ],
+    "visualizable": "1",
+    "index_name": "4dbe5667-7b6b-41d7-82af-211562424d9a",
+    "catalog_uuid": "ec58dab7-d891-4abb-936e-d5d274a6ce9b",
+    "status": "ok",
+    "field": [
+        {
+            "name": "CIN",
+            "id": "CIN",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyName",
+            "id": "CompanyName",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyROCcode",
+            "id": "CompanyROCcode",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyCategory",
+            "id": "CompanyCategory",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanySubCategory",
+            "id": "CompanySubCategory",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyClass",
+            "id": "CompanyClass",
+            "type": "keyword"
+        },
+        {
+            "name": "AuthorizedCapital",
+            "id": "AuthorizedCapital",
+            "type": "keyword"
+        },
+        {
+            "name": "PaidupCapital",
+            "id": "PaidupCapital",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyRegistrationdate_date",
+            "id": "CompanyRegistrationdate_date",
+            "type": "keyword"
+        },
+        {
+            "name": "Registered_Office_Address",
+            "id": "Registered_Office_Address",
+            "type": "keyword"
+        },
+        {
+            "name": "Listingstatus",
+            "id": "Listingstatus",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyStatus",
+            "id": "CompanyStatus",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyStateCode",
+            "id": "CompanyStateCode",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyIndian/Foreign Company",
+            "id": "CompanyIndian/Foreign Company",
+            "type": "keyword"
+        },
+        {
+            "name": "nic_code",
+            "id": "nic_code",
+            "type": "keyword"
+        },
+        {
+            "name": "CompanyIndustrialClassification",
+            "id": "CompanyIndustrialClassification",
+            "type": "keyword"
+        }
+    ],
+    "created_date": "2017-05-25T16:25:16Z",
+    "updated_date": "2026-07-22T08:17:15Z",
+    "active": "1",
+    "external_ws_url": "",
+    "external_ws": "0",
+    "target_bucket": {
+        "index": "mca_final",
+        "type": "ec58dab7-d891-4abb-936e-d5d274a6ce9b"
+    },
+    "field_exposed": [
+        {
+            "name": "Company State Code",
+            "id": "CompanyStateCode",
+            "type": "keyword",
+            "mandatory": true
+        }
+    ],
+    "aggregation": [],
+    "field_dependent": [],
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "total": 3674314,
+    "count": 3,
+    "limit": "3",
+    "offset": "0",
+    "records": [
+        {
+            "CIN": "ABD-0345",
+            "CompanyName": "Titan Winners Fund Management LLP",
+            "CompanyROCcode": "ROC Haryana",
+            "CompanyCategory": "",
+            "CompanySubCategory": "",
+            "CompanyClass": "",
+            "AuthorizedCapital": "",
+            "PaidupCapital": "",
+            "CompanyRegistrationdate_date": "2023-02-10",
+            "Registered_Office_Address": "3rd Floor, M3M Urbana Business Park, North Tower and Part of South Tower,sector 67,Bhondsi,Gurgaon,Haryana,India-122102",
+            "Listingstatus": "",
+            "CompanyStatus": "Active",
+            "CompanyStateCode": "haryana",
+            "CompanyIndian/Foreign Company": "",
+            "nic_code": "",
+            "CompanyIndustrialClassification": "Finance"
+        },
+        {
+            "CIN": "U52100HR2015OPC056314",
+            "CompanyName": "COVEY RETAIL (OPC) PRIVATE LIMITED",
+            "CompanyROCcode": "ROC Delhi",
+            "CompanyCategory": "Company limited by shares",
+            "CompanySubCategory": "Non-government company",
+            "CompanyClass": "One Person Company",
+            "AuthorizedCapital": "100000.00",
+            "PaidupCapital": "100000.00",
+            "CompanyRegistrationdate_date": "2015-08-06",
+            "Registered_Office_Address": "H.NO. 284   DEFENCE COLONY,HISAR,Haryana,125001-India",
+            "Listingstatus": "Unlisted",
+            "CompanyStatus": "Strike Off",
+            "CompanyStateCode": "haryana",
+            "CompanyIndian/Foreign Company": "India",
+            "nic_code": "52100",
+            "CompanyIndustrialClassification": "Trading"
+        },
+        {
+            "CIN": "U51909DL2019PTC351212",
+            "CompanyName": "ABSENTIA TRADERS PRIVATE LIMITED",
+            "CompanyROCcode": "ROC Delhi",
+            "CompanyCategory": "Company limited by shares",
+            "CompanySubCategory": "Non-government company",
+            "CompanyClass": "Private",
+            "AuthorizedCapital": "100000.00",
+            "PaidupCapital": "100000.00",
+            "CompanyRegistrationdate_date": "2019-06-11",
+            "Registered_Office_Address": "G-55 S/F VIKASH MARG   LAXMI NAGAR,NEW DELHI,East Delhi,Delhi,110092-India",
+            "Listingstatus": "Unlisted",
+            "CompanyStatus": "Active",
+            "CompanyStateCode": "delhi",
+            "CompanyIndian/Foreign Company": "India",
+            "nic_code": "51909",
+            "CompanyIndustrialClassification": "Trading"
+        }
+    ]
+}

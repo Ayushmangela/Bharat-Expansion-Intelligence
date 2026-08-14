@@ -1,0 +1,126 @@
+{
+    "index_name": "37231365-78ba-44d5-ac22-3deec40b9197",
+    "title": "Local Government Directory (LGD) - Districts",
+    "desc": "Local Government Directory (LGD) - Districts",
+    "created": "1658808421056",
+    "updated": 1786684349,
+    "created_date": "2022-07-26T09:37:01Z",
+    "updated_date": "2026-08-14T05:12:29Z",
+    "active": "1",
+    "visualizable": "1",
+    "catalog_uuid": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Panchayati Raj"
+    ],
+    "sector": [
+        "Panchayati Raj"
+    ],
+    "field": [
+        {
+            "name": "state_code",
+            "id": "state_code",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_english",
+            "id": "state_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "state_name_local",
+            "id": "state_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "state_census2011_code",
+            "id": "state_census2011_code",
+            "type": "keyword"
+        },
+        {
+            "name": "district_code",
+            "id": "district_code",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name_english",
+            "id": "district_name_english",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name_local",
+            "id": "district_name_local",
+            "type": "keyword"
+        },
+        {
+            "name": "district_census2011_code",
+            "id": "district_census2011_code",
+            "type": "keyword"
+        }
+    ],
+    "target_bucket": {
+        "index": "lgd",
+        "type": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+        "field": "37231365-78ba-44d5-ac22-3deec40b9197"
+    },
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 785,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "state_code": 32,
+            "state_name_english": "Kerala",
+            "state_name_local": "KERALA                                            ",
+            "state_census2011_code": "32",
+            "district_code": 554,
+            "district_name_english": "Alappuzha",
+            "district_name_local": "\u0d06\u0d32\u0d2a\u0d4d\u0d2a\u0d41\u0d34",
+            "district_census2011_code": "598"
+        },
+        {
+            "state_code": 9,
+            "state_name_english": "Uttar Pradesh",
+            "state_name_local": "UTTAR PRADESH                                     ",
+            "state_census2011_code": "09",
+            "district_code": 121,
+            "district_name_english": "Ambedkar Nagar",
+            "district_name_local": "AMBEDKAR NAGAR                                    ",
+            "district_census2011_code": "178"
+        },
+        {
+            "state_code": 3,
+            "state_name_english": "Punjab",
+            "state_name_local": "PUNJAB                                            ",
+            "state_census2011_code": "03",
+            "district_code": 27,
+            "district_name_english": "Amritsar",
+            "district_name_local": "AMRITSAR                                          ",
+            "district_census2011_code": "049"
+        },
+        {
+            "state_code": 24,
+            "state_name_english": "Gujarat",
+            "state_name_local": "GUJARAT                                           ",
+            "state_census2011_code": "24",
+            "district_code": 672,
+            "district_name_english": "Arvalli",
+            "district_name_local": "",
+            "district_census2011_code": "000"
+        },
+        {
+            "state_code": 10,
+            "state_name_english": "Bihar",
+            "state_name_local": "BIHAR                                             ",
+            "state_census2011_code": "10",
+            "district_code": 611,
+            "district_name_english": "Arwal",
+            "district_name_local": "\u0905\u0930\u0935\u0932",
+            "district_census2011_code": "240"
+        }
+    ]
+}

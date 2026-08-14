@@ -1,0 +1,138 @@
+{
+    "index_name": "f8cd85a1-f9b8-4ff1-b195-9f75c10eb338",
+    "title": "District Wise Total MSME Registered Enterprises under UDYAM Registration till last date",
+    "desc": "District Wise Total MSME Registered Enterprises under UDYAM Registration till last date",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Micro, Small and Medium Enterprises"
+    ],
+    "sector": [
+        "Industries",
+        "Medium",
+        "Micro",
+        "Small Scale"
+    ],
+    "source": "data.gov.in",
+    "catalog_uuid": "0536e86e-3751-4054-84e5-e257d4c94477",
+    "visualizable": "1",
+    "active": "1",
+    "created": 1638430835,
+    "updated": 1786663135,
+    "created_date": "2021-12-02T07:40:35Z",
+    "updated_date": "2026-08-13T23:18:55Z",
+    "external_ws": 0,
+    "external_ws_url": "",
+    "target_bucket": {
+        "index": "udyam_msme",
+        "type": "0536e86e-3751-4054-84e5-e257d4c94477",
+        "field": "f8cd85a1-f9b8-4ff1-b195-9f75c10eb338"
+    },
+    "field": [
+        {
+            "name": "state_name",
+            "id": "state_name",
+            "type": "keyword"
+        },
+        {
+            "name": "state_id",
+            "id": "state_id",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name",
+            "id": "district_name",
+            "type": "keyword"
+        },
+        {
+            "name": "lg_dt_code",
+            "id": "lg_dt_code",
+            "type": "keyword"
+        },
+        {
+            "name": "medium",
+            "id": "medium",
+            "type": "keyword"
+        },
+        {
+            "name": "micro",
+            "id": "micro",
+            "type": "keyword"
+        },
+        {
+            "name": "small",
+            "id": "small",
+            "type": "keyword"
+        },
+        {
+            "name": "total",
+            "id": "total",
+            "type": "keyword"
+        }
+    ],
+    "field_exposed": [
+        {
+            "name": "state_name",
+            "id": "state_name.keyword",
+            "type": "keyword"
+        }
+    ],
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 788,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "SRIKAKULAM",
+            "lg_dt_code": "519",
+            "medium": "17",
+            "micro": "64721",
+            "small": "409",
+            "total": "65147"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "Tirupati",
+            "lg_dt_code": "752",
+            "medium": "18",
+            "micro": "80656",
+            "small": "242",
+            "total": "80916"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "VISAKHAPATNAM",
+            "lg_dt_code": "520",
+            "medium": "154",
+            "micro": "125312",
+            "small": "1849",
+            "total": "127315"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "VIZIANAGARAM",
+            "lg_dt_code": "521",
+            "medium": "19",
+            "micro": "57939",
+            "small": "364",
+            "total": "58322"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "Y.S.R",
+            "lg_dt_code": "504",
+            "medium": "28",
+            "micro": "108155",
+            "small": "734",
+            "total": "108917"
+        }
+    ]
+}

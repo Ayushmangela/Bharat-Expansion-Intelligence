@@ -1,0 +1,138 @@
+{
+    "index_name": "c3dfe7e6-0cfd-4ddb-8f79-9cb3695d9866",
+    "title": "District wise Services MSME Registered Enterprises under UDYAM Registration till last date",
+    "desc": "District wise Services MSME Registered Enterprises under UDYAM Registration till last date",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Micro, Small and Medium Enterprises"
+    ],
+    "sector": [
+        "Industries",
+        "Medium",
+        "Micro",
+        "Small Scale"
+    ],
+    "source": "data.gov.in",
+    "catalog_uuid": "0536e86e-3751-4054-84e5-e257d4c94477",
+    "visualizable": "1",
+    "active": "1",
+    "created": 1638430824,
+    "updated": 1786655721,
+    "created_date": "2021-12-02T07:40:24Z",
+    "updated_date": "2026-08-13T21:15:21Z",
+    "external_ws": 0,
+    "external_ws_url": "",
+    "target_bucket": {
+        "index": "udyam_msme",
+        "type": "0536e86e-3751-4054-84e5-e257d4c94477",
+        "field": "c3dfe7e6-0cfd-4ddb-8f79-9cb3695d9866"
+    },
+    "field": [
+        {
+            "name": "state_name",
+            "id": "state_name",
+            "type": "keyword"
+        },
+        {
+            "name": "state_id",
+            "id": "state_id",
+            "type": "keyword"
+        },
+        {
+            "name": "district_name",
+            "id": "district_name",
+            "type": "keyword"
+        },
+        {
+            "name": "lg_dt_code",
+            "id": "lg_dt_code",
+            "type": "keyword"
+        },
+        {
+            "name": "medium",
+            "id": "medium",
+            "type": "keyword"
+        },
+        {
+            "name": "micro",
+            "id": "micro",
+            "type": "keyword"
+        },
+        {
+            "name": "small",
+            "id": "small",
+            "type": "keyword"
+        },
+        {
+            "name": "total",
+            "id": "total",
+            "type": "keyword"
+        }
+    ],
+    "field_exposed": [
+        {
+            "name": "state_name",
+            "id": "state_name.keyword",
+            "type": "keyword"
+        }
+    ],
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 788,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "Alluri Sitharama Raju",
+            "lg_dt_code": "745",
+            "medium": "0",
+            "micro": "7073",
+            "small": "6",
+            "total": "7079"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "Konaseema",
+            "lg_dt_code": "747",
+            "medium": "5",
+            "micro": "37288",
+            "small": "112",
+            "total": "37405"
+        },
+        {
+            "state_name": "ANDHRA PRADESH",
+            "state_id": "28",
+            "district_name": "WEST GODAVARI",
+            "lg_dt_code": "523",
+            "medium": "73",
+            "micro": "82973",
+            "small": "1203",
+            "total": "84249"
+        },
+        {
+            "state_name": "ARUNACHAL PRADESH",
+            "state_id": "12",
+            "district_name": "DIBANG VALLEY",
+            "lg_dt_code": "230",
+            "medium": "0",
+            "micro": "149",
+            "small": "3",
+            "total": "152"
+        },
+        {
+            "state_name": "ARUNACHAL PRADESH",
+            "state_id": "12",
+            "district_name": "LOWER SUBANSIRI",
+            "lg_dt_code": "236",
+            "medium": "1",
+            "micro": "1053",
+            "small": "8",
+            "total": "1062"
+        }
+    ]
+}

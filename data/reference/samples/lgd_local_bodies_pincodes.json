@@ -1,0 +1,106 @@
+{
+    "index_name": "71818d1a-c114-46cb-aa9b-56ed70d4bc4a",
+    "title": "Local Government Directory (LGD) - Local Bodies with PIN Codes",
+    "desc": "Local Government Directory (LGD) - Local Bodies with PIN Codes",
+    "created": "1663928577953",
+    "updated": 1786665651,
+    "created_date": "2022-09-23T15:53:16Z",
+    "updated_date": "2026-08-14T00:00:51Z",
+    "active": "1",
+    "visualizable": "1",
+    "catalog_uuid": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+    "source": "data.gov.in",
+    "org_type": "Central",
+    "org": [
+        "Ministry of Panchayati Raj"
+    ],
+    "sector": [
+        "Panchayati Raj"
+    ],
+    "field": [
+        {
+            "name": "stateCode",
+            "id": "stateCode",
+            "type": "long"
+        },
+        {
+            "name": "stateNameEnglish",
+            "id": "stateNameEnglish",
+            "type": "text"
+        },
+        {
+            "name": "localBodyCode",
+            "id": "localBodyCode",
+            "type": "long"
+        },
+        {
+            "name": "localBodyNameEnglish",
+            "id": "localBodyNameEnglish",
+            "type": "text"
+        },
+        {
+            "name": "localBodyTypeName",
+            "id": "localBodyTypeName",
+            "type": "text"
+        },
+        {
+            "name": "pincode",
+            "id": "pincode",
+            "type": "long"
+        }
+    ],
+    "target_bucket": {
+        "index": "lgd_airflow",
+        "type": "5aefd6b6-f0ed-4b11-aa87-a2f2f7277227",
+        "field": "71818d1a-c114-46cb-aa9b-56ed70d4bc4a"
+    },
+    "message": "Resource lists",
+    "version": "2.2.0",
+    "status": "ok",
+    "total": 7411,
+    "count": 5,
+    "limit": "5",
+    "offset": "0",
+    "records": [
+        {
+            "stateCode": 2,
+            "stateNameEnglish": "Himachal Pradesh",
+            "localBodyCode": 297012,
+            "localBodyNameEnglish": "Anni",
+            "localBodyTypeName": "Town Panchayat",
+            "pincode": 172026
+        },
+        {
+            "stateCode": 24,
+            "stateNameEnglish": "Gujarat",
+            "localBodyCode": 251187,
+            "localBodyNameEnglish": "Nadiad",
+            "localBodyTypeName": "Municipality",
+            "pincode": 387001
+        },
+        {
+            "stateCode": 8,
+            "stateNameEnglish": "Rajasthan",
+            "localBodyCode": 299765,
+            "localBodyNameEnglish": "Mandawar",
+            "localBodyTypeName": "Town Panchayat",
+            "pincode": 301407
+        },
+        {
+            "stateCode": 29,
+            "stateNameEnglish": "Karnataka",
+            "localBodyCode": 251995,
+            "localBodyNameEnglish": "Hosakote",
+            "localBodyTypeName": "City Municipal Council",
+            "pincode": 562114
+        },
+        {
+            "stateCode": 8,
+            "stateNameEnglish": "Rajasthan",
+            "localBodyCode": 293844,
+            "localBodyNameEnglish": "Greater Jaipur",
+            "localBodyTypeName": "Municipal Corporations",
+            "pincode": 302029
+        }
+    ]
+}
