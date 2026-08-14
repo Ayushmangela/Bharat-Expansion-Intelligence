@@ -101,7 +101,15 @@ class MCAConnector(BaseConnector):
 
         def fetch_one(offset: int) -> None:
             nonlocal completed_since_checkpoint
-            known_so_far = sum(len(v) for v in records_by_offset.values())
+            # BUG FOUND live on Karnataka (258 pages — enough concurrent
+            # traffic to hit it): reading records_by_offset.values() here
+            # without the lock raced against other threads' `with lock:`
+            # writes below, causing "RuntimeError: dictionary changed size
+            # during iteration". Smaller states didn't have enough
+            # concurrent pages to expose it. Fixed by taking the lock for
+            # the read too.
+            with lock:
+                known_so_far = sum(len(v) for v in records_by_offset.values())
             page_records = self._fetch_page_with_anomaly_retry(state_filter, offset, batch_size, filters, total, known_so_far)
             with lock:
                 records_by_offset[offset] = page_records

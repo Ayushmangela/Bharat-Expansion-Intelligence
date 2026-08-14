@@ -137,10 +137,36 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
 - Verified example (for schema reference only, not a stable production resource):
   `59b6cf39-6093-4da7-b9c9-6fe68ecff587` ("Power Supply Position - October 2014"),
   43 rows, sample saved to `data/reference/samples/cea_power_supply_oct2014.json`.
-- Fallback: CEA publishes Power Supply Position reports directly at
-  `https://cea.nic.in` (PDF/XLS, updated monthly) — treat like the GST PDF source:
-  polite scraping per rule 2.5, or reduced scope (drop this indicator for v1) per
-  the roadmap's reduced-scope fallback.
+- **Fallback investigated (Phase 2, via dedicated research agent) — technically
+  viable, but a real licensing question, not yet resolved.** CEA publishes
+  current Power Supply Position reports directly (July 2026 data confirmed live
+  as of this check) at `https://cea.nic.in/monthly-reports-archive/?lang=en`, as
+  a PDF per month (Energy + Peak, separately), text-based and cleanly
+  extractable (not scanned). Verified example:
+  `https://cea.nic.in/wp-content/uploads/power_supply/2026/07/Energy_July26_Provisional.pdf`.
+  Grain matches what's needed: state/UT × Energy Requirement/Supplied/Not-Supplied
+  (MU), both report-month and April-to-date cumulative.
+  - **Automatable, but not via predictable filenames** — the filename scheme
+    changed between 2024 and 2026 (`PSPEnergyJune2024-1.pdf` vs
+    `Energy_July26_Provisional.pdf`), so naive URL construction breaks. The
+    archive page's "Show Archive Reports" button fires an **unauthenticated
+    WordPress AJAX endpoint** (verified with plain `curl`, no session/nonce
+    needed): `POST https://cea.nic.in/wp-admin/admin-ajax.php` with
+    `action=archive_report&year=YYYY&month=MonthName&category=power_supply`,
+    returning an HTML fragment with the actual PDF link(s) to parse out. A
+    scheduled job can do this reliably: POST → parse href → download PDF →
+    extract table (pdfplumber/camelot).
+  - **Licensing gap — needs a decision before building a connector.** CEA's
+    own Copyright Policy
+    (`https://cea.nic.in/wp-content/uploads/web_policies/2021/11/Copyright_CEA.pdf`)
+    requires **prior permission via email to CEA before reproduction**, plus
+    attribution and no-alteration — stricter than GODL-India and not
+    equivalent to the open-reuse terms this project is built around
+    (CLAUDE.md §2.6). The site footer separately claims "All Rights
+    Reserved." Options if pursued: request permission once and document the
+    grant in `ATTRIBUTIONS.md`, or treat CEA as out of scope for v1 under the
+    roadmap's reduced-scope fallback. **Not decided — needs the user's call,
+    not an assumption.**
 
 ### S19 — Census 2011
 - Status: `PARTIAL`
@@ -163,16 +189,45 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
   join. (Phase 1 used a direct name-dict join for the Goa checkpoint, ad hoc,
   not yet routed through the resolver properly — see `STATUS.md` item 10.)
   Sample: `data/reference/samples/census_2011_population.json`.
-- Literacy rate (district-wise, all-India): `PENDING`. Found only state-level
-  (`literates-and-literacy-rates-sex-census-2001-and-2011`,
-  `stateuts-wise-literacy-rates-census-2001-and-2011`) and single-state resources
-  (e.g. `district-wise-literacy-haryana-during-2011`, Karnataka's
-  `literacy-rate-percentage-2011-census`). No all-India district-wise literacy
-  resource surfaced in a title-search pass. Needs a follow-up discovery session,
-  possibly against the Registrar General of India's own census tables rather than
-  data.gov.in's catalog.
-- Worker classification (district-wise, all-India): `PENDING` — not attempted yet
-  this session.
+- Literacy rate + worker classification (district-wise, all-India): `VERIFIED`
+  — **found in Phase 2 via a dedicated research agent, not on data.gov.in at
+  all.** Confirmed why the earlier data.gov.in search missed it: data.gov.in's
+  own "Primary Census Abstract 2011 - India and States" is explicitly
+  state-grain per its own metadata; the district-grain version simply isn't
+  mirrored there. It lives on the Census of India's own microdata catalog
+  (ORGI's NADA portal, a separate site from data.gov.in):
+  - Table: **"PCA SD: Primary Census Abstract data, India & States/UTs — State
+    and district level — 2011"**, reference `PC11_PCA-SD`.
+  - Catalog page: `https://censusindia.gov.in/nada/index.php/catalog/6191`
+  - Direct download (verified HTTP 200):
+    `https://censusindia.gov.in/nada/index.php/catalog/6191/download/9268/DDW_PCA0000_2011_Indiastatedist.xlsx`
+  - Format: single XLSX (~1.34 MB), one sheet, 2029 rows × 94 columns — 3
+    India-total rows, 105 state/UT rows, and **1920 district rows = exactly
+    640 districts × {Total/Rural/Urban}**, matching the official Census 2011
+    district count exactly (same count as the population resource already
+    loaded).
+  - Columns confirmed present: `P_LIT`/`M_LIT`/`F_LIT`, `P_ILL`/`M_ILL`/`F_ILL`
+    (literacy); `TOT_WORK_P/M/F`, `MAINWORK_P/M/F` split by `MAIN_CL`
+    (cultivators)/`MAIN_AL` (agricultural labourers)/`MAIN_HH` (household
+    industry)/`MAIN_OT` (other workers), the same breakdown again for
+    `MARGWORK` (marginal workers, further split by duration), plus
+    `NON_WORK_P/M/F`. This is the full C-series worker classification — the
+    working-age population breakdown BFR's formula actually calls for,
+    replacing the current total-population proxy.
+  - **Same geography caveat as the population resource already loaded**:
+    `State`/`District` columns are Census 2011's own numeric codes (2-digit
+    state, 3-digit district), not LGD codes — needs the same
+    `GeographyResolver`-based crosswalk already built for the population
+    table (`pipeline/transforms/census_silver.py`), not a direct code join.
+  - Stability: persistent NADA/IHSN catalog entry (catalog id 6191, resource
+    id 9268) — citable, not something needing periodic rediscovery.
+  - **Licensing — not GODL, a distinct term.** ORGI's Terms & Conditions
+    (`https://censusindia.gov.in/census.website/node/288`) permit reproduction
+    free of charge if accurate, not misleading, and attributed — but this
+    isn't the GODL-India badge data.gov.in resources carry. Cite it as ORGI's
+    own attribution-required reuse policy in `ATTRIBUTIONS.md`, not as GODL.
+  - Not yet loaded into the pipeline — this is a Phase 2 discovery result,
+    wiring up the actual connector/transform is separate follow-up work.
 - **Tag everything from this source with vintage = 2011.**
 
 ### S_PINCODE_DIR — All India Pincode Directory (added in Phase 1, not Phase 0)
