@@ -16,8 +16,8 @@ status here is worse than no status file at all.
 | Phase | Status |
 |---|---|
 | Phase 0 — Resource discovery | ✅ Done, with 2 known gaps (see below) |
-| Phase 1 — Geography spine + one KPI | ✅ Core checkpoint met — see below for what's real vs. simplified |
-| Phase 2+ | Not started |
+| Phase 1 — Geography spine + one KPI | ✅ Done, stress-tested on 2 states |
+| Phase 2 — Full ingestion | 🚧 In progress — Udyam connector done (92.39% resolution); MCA still only Goa+Bihar, not the full ~3.67M-row sweep |
 
 ---
 
@@ -335,6 +335,72 @@ status here is worse than no status file at all.
     for whoever owns this table's design rather than guessing — either
     answer is defensible, but the docs don't currently say which.
 
+15. **Udyam connector built — first real Phase 2 work, and a genuinely
+    important schema bug found in the process.** Loaded both district-wise
+    resources (total + services, 788 rows each) into a new
+    `silver.udyam_snapshot` (raw, per docs/04-ETL-PIPELINE.md "store every
+    snapshot" — Udyam has no date field of its own, ingest date IS the
+    snapshot date) and `gold.fact_district_month` (created now via migration
+    `66bd2d4f048b`, deferred out of Phase 1 since nothing populated it yet).
+
+    - **Schema bug**: `docs/03-DATA-MODEL.md`'s `fact_district_month` DDL
+      comments `industry_key ... NULL = all industries` directly next to
+      `PRIMARY KEY (geo_key, date_key, industry_key)` — but **Postgres
+      forbids NULL in any primary-key column**, full stop. That combination
+      cannot work as documented. First Udyam insert failed with
+      `NotNullViolation`. Fixed with an explicit "All Industries" sentinel
+      row in `dim_industry` (`industry_key = 1`, migration `5ac09b374c70`)
+      instead of NULL — standard practice for exactly this case, and now the
+      documented pattern to follow for any future NULL-industry insert.
+    - **Geography bug, same family as the earlier NULL-uniqueness one**:
+      `lg_dt_code` (Udyam's LGD code field, confirmed genuine in Phase 0) is
+      **not always trustworthy as a blind join key**. Found 11 districts
+      where Udyam's data hasn't caught up to LGD district splits: 8 in
+      Rajasthan (2023 splits — e.g. Anupgarh, carved from Ganganagar, is
+      still tagged with Ganganagar's old code `100`) and Puducherry's
+      smaller regions (Yanam, Mahe) sharing the main Puducherry code `600`
+      instead of their own distinct LGD codes. Verified by direct lookup
+      that LGD **does** have correct distinct codes for all of these — the
+      staleness is on Udyam's publishing side, not a resolver problem. Fix:
+      trust `lg_dt_code` only when it also agrees with `district_name`;
+      otherwise fall back to the same `GeographyResolver` text-based
+      resolution every other source uses. Result: **92.39%** resolution
+      (708 by code, 20 by name fallback, 60 quarantined — same
+      spelling/abbreviation-drift pattern as Census, e.g. "CHITOOR" for
+      Chittoor, "SPSR NELLORE" for the renamed Sri Potti Sriramulu Nellore;
+      flagged as a good candidate for the same alias-batch treatment Census
+      got, not done this round given it already clears the 90% gate).
+    - **Merge bug I caught before it corrupted data**: initially joined the
+      total and services dataframes on `lg_dt_code` alone — given the 11
+      duplicate codes exist on *both* sides, this fanned out into a
+      cartesian product for those groups (788 rows became 814). Caught via
+      an explicit row-count assertion before any DB writes; fixed by
+      merging on `(lg_dt_code, normalised district_name)` instead.
+    - **A real mistake made and then fixed**: after noticing
+      `geography_quarantine` duplicating again on a second Udyam run (the
+      same open natural-key question from item 14), deduplicated it with
+      `GROUP BY (source_code, observed_state, observed_district)` — which
+      is correct for LGD/Census/Udyam-style "one row per geography label"
+      quarantine, but **wrong for MCA**, where many distinct companies
+      legitimately share the same `(state, district)` pair. That dedup
+      collapsed MCA's 695 distinct company quarantine records down to 1,
+      destroying real audit data. Caught immediately by checking the count
+      afterward; fixed by re-running the MCA silver transform (idempotent
+      for `fact_company`, safely regenerated all 695/0 quarantine rows for
+      Goa/Bihar). **Lesson: that dedup key is only valid for single-entity-
+      per-row quarantine sources, never for a source where multiple
+      distinct records can share the same geography text.**
+    - **Idempotency verified**: re-ran the Udyam transform against the same
+      bronze snapshot a second time — `fact_district_month` and
+      `udyam_snapshot` both stayed at exactly 728 rows both times (upserts
+      working correctly).
+    - **Numbers pass a sanity check**: Goa's services MSMEs (44,896 in
+      North Goa) dwarf the manufacturing approximation (9,450) — consistent
+      with Goa's tourism-driven economy, a good sign the derived split means
+      something even though `msme_manufacturing` is an approximation
+      (`total - services`, not a directly-sourced manufacturing figure — no
+      Udyam manufacturing-specific resource exists; documented in code).
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -359,20 +425,24 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Phase 1 is now solid: checkpoint met, stress-tested on two states (Goa 95.57%,
-Bihar 100%), idempotency verified on real fact data, and the Census join is
-routed properly through the resolver (98.75% national, remainder is genuine
-structural splits, not a bug). Remaining before/alongside Phase 2:
+Phase 1 is solid (checkpoint met, stress-tested on two states, Census join
+routed through the resolver). Phase 2 has started: Udyam is done nationally
+(92.39% resolution, real numbers in `gold.fact_district_month`). Remaining:
 
-1. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
+1. **MCA full sweep across all ~36 states/UTs** (~3.67M rows) — the biggest
+   remaining piece. The connector already supports this per-state
+   (`pipeline/connectors/mca.py`, checkpointed/resumable); just needs to loop
+   every state instead of Goa/Bihar. Will take a while given the politeness
+   rate limit (0.7 req/s) — budget for it, don't rush it.
+2. Optionally push Udyam's 92.39% higher with an alias batch for the 60
+   quarantined districts (same spelling/abbreviation-drift pattern Census
+   had) — not required, already above the 90% gate.
+3. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
    (Census literacy/worker-classification — needed to turn BFR from a
-   total-population proxy into the KPI as formally defined; CEA power supply)
-   before or after Phase 2.
-2. Decide on an apportionment methodology for the 8 quarantined structural-split
-   census districts if/when their population matters (currently just excluded,
-   not guessed at).
-3. Phase 2 proper: MCA sweep across ALL states (~3.67M rows, checkpointed/resumable
-   — the connector already supports this per-state, just needs to loop all states),
-   Udyam connector + snapshot-diff, all five validation gates wired,
-   `meta.ingestion_run` populated on every load (already true), idempotency
-   re-verified at full scale.
+   total-population proxy into the KPI as formally defined; CEA power supply).
+4. Decide on an apportionment methodology for the 8 quarantined structural-split
+   census districts if/when their population matters (currently just excluded).
+5. Remaining Phase 2 items once MCA's full sweep lands: Udyam snapshot-diff
+   (need a second snapshot before a flow can be derived — not possible yet,
+   only one snapshot exists), all five validation gates wired, idempotency
+   re-verified at full national scale.
