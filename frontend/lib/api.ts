@@ -176,6 +176,77 @@ export function getDistrictScore(lgdDistrictCode: number, profile?: string) {
   return getJson<DistrictScorecard>(`/api/v1/districts/${lgdDistrictCode}/score${search}`);
 }
 
+export interface PredictiveShap {
+  model_version_id: number;
+  target_variable: string;
+  target_description: string;
+  cv_r2: number | null;
+  model_quality: string;
+  n_train_districts: number;
+  trained_at: string;
+  base_value: number;
+  predicted_value: number;
+  contributions: { indicator_code: string; indicator_name: string; feature_value: number | null; shap_value: number }[];
+}
+
+export interface DistrictExplain {
+  lgd_district_code: number;
+  profile: string;
+  final_score: number;
+  contributions: {
+    indicator_code: string;
+    indicator_name: string;
+    contribution: number;
+    contribution_method: string;
+    raw_value: number | null;
+    is_imputed: boolean;
+    is_inherited: boolean;
+    source_code: string;
+  }[];
+  predictive_model: PredictiveShap | null;
+  narrative: string | null;
+  narrative_available: boolean;
+  warnings: string[];
+}
+
+export function getDistrictExplain(lgdDistrictCode: number, profile?: string) {
+  const search = profile ? `?profile=${encodeURIComponent(profile)}` : "";
+  return getJson<DistrictExplain>(`/api/v1/districts/${lgdDistrictCode}/explain${search}`);
+}
+
+export interface CounterfactualLever {
+  indicator_code: string;
+  current_value: number;
+  required_value: number;
+  required_delta: number;
+  feasible: boolean;
+  description: string;
+}
+
+export interface CounterfactualResult {
+  lgd_district_code: number;
+  current_rank: number;
+  target_rank: number;
+  current_score?: number;
+  target_score?: number;
+  already_achieved: boolean;
+  levers: CounterfactualLever[];
+  infeasible: string[];
+}
+
+export async function getCounterfactual(lgdDistrictCode: number, targetRank: number, profile?: string) {
+  const search = new URLSearchParams({ target_rank: String(targetRank) });
+  if (profile) search.set("profile", profile);
+  const res = await fetch(`${API_BASE}/api/v1/districts/${lgdDistrictCode}/counterfactual?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? `API counterfactual failed: ${res.status}`);
+  }
+  return res.json() as Promise<CounterfactualResult>;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) {

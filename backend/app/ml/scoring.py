@@ -162,6 +162,31 @@ def monte_carlo_rank_sensitivity(
     ).set_index("geo_key")
 
 
+def effective_indicator_weights(
+    present_indicators: list[str], weights: dict[str, float], pillar_weights: dict[str, float]
+) -> dict[str, float]:
+    """The per-district linear coefficient such that
+    opportunity_score == sum(effective_weight[c] * normalised_value[c] for c
+    in present_indicators) exactly — i.e. entropy weight renormalised within
+    the indicator's pillar (among what's present), times that pillar's
+    weight renormalised across present pillars. Factored out of
+    compute_scores()'s per-district loop so counterfactual.py can reuse the
+    exact same coefficients rather than re-deriving (and risking drift from)
+    the real scoring math.
+    """
+    pillars_present = {INDICATOR_META[c][0] for c in present_indicators}
+    present_pillar_weight = sum(pillar_weights[p] for p in pillars_present)
+
+    effective: dict[str, float] = {}
+    for pillar_name in pillars_present:
+        pillar_indicators = [c for c in present_indicators if INDICATOR_META[c][0] == pillar_name]
+        indicator_weight_sum = sum(weights[c] for c in pillar_indicators)
+        pw_effective = pillar_weights[pillar_name] / present_pillar_weight
+        for c in pillar_indicators:
+            effective[c] = (weights[c] / indicator_weight_sum) * pw_effective
+    return effective
+
+
 def compute_scores(profile_code: str = "balanced") -> dict:
     conn = get_conn()
     ref_month = reference_month(conn)
@@ -226,32 +251,23 @@ def compute_scores(profile_code: str = "balanced") -> dict:
         # pillar scores: weighted average of present indicators in that pillar
         # (renormalising indicator weights within the pillar to sum to 1 among
         # what's actually present — docs §5 "weighted average within pillar")
+        present_indicators = list(present.index)
         pillar_scores: dict[str, float] = {}
-        indicator_score_contribution: dict[str, float] = {}
         for pillar_name in ("economic", "ecosystem", "human_capital"):
-            pillar_indicators = [c for c in indicator_codes if INDICATOR_META[c][0] == pillar_name and c in present.index]
+            pillar_indicators = [c for c in present_indicators if INDICATOR_META[c][0] == pillar_name]
             if not pillar_indicators:
                 continue
             w = np.array([weights[c] for c in pillar_indicators])
             w = w / w.sum()
             vals = np.array([present[c] for c in pillar_indicators])
             pillar_scores[pillar_name] = float((w * vals).sum())
-            for c, w_i in zip(pillar_indicators, w, strict=True):
-                indicator_score_contribution[c] = float(w_i)  # share within pillar; scaled to score-points below
 
         if not pillar_scores:
             continue
 
-        present_pillar_weight = sum(pillar_weights[p] for p in pillar_scores)
-        opportunity_score = sum(pillar_scores[p] * pillar_weights[p] for p in pillar_scores) / present_pillar_weight
-
-        for pillar_name in pillar_scores:
-            pw_effective = pillar_weights[pillar_name] / present_pillar_weight
-            for c in indicator_score_contribution:
-                if INDICATOR_META[c][0] != pillar_name:
-                    continue
-                indicator_score_contribution[c] *= pw_effective * present[c]
-        contributions_by_geo[geo_key] = indicator_score_contribution
+        eff_weights = effective_indicator_weights(present_indicators, weights, pillar_weights)
+        opportunity_score = sum(eff_weights[c] * present[c] for c in present_indicators)
+        contributions_by_geo[geo_key] = {c: eff_weights[c] * present[c] for c in present_indicators}
 
         confidence = sum(weights[c] for c in present.index) / sum(weights.values())
 

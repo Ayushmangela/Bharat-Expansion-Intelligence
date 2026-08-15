@@ -19,9 +19,10 @@ status here is worse than no status file at all.
 | Phase 1 — Geography spine + one KPI | ✅ Done, stress-tested on 2 states |
 | Phase 2 — Full ingestion | ✅ Done — MCA national sweep complete (all 36 states/UTs, 3,599,249 rows, 0 duplicate CINs); Udyam done nationally (92.39% resolution); Census population + literacy/worker tables loaded |
 | Phase 3 — Scoring engine + Opportunity Score | ✅ Done, reduced scope (7 of 22 KPIs — see item 26) |
-| API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`; new Rankings page + scorecard section on district detail |
-| Phase 4 — SHAP explanation engine | ❌ Not started — contributions are currently linear-weighted, explicitly labelled `contribution_method` |
-| Test suite | ⚠️ Minimal — 8 unit tests on the scoring math only (`backend/tests/test_scoring.py`). No integration tests, no frontend tests. Real gap, not hidden. |
+| API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`, `/districts/{code}/counterfactual`; Rankings page + scorecard + SHAP + counterfactual sections on district detail |
+| Phase 4 — SHAP explanation engine | ✅ Done, honestly weak (cv_r2=0.11 — see item 27) — real LightGBM + TreeExplainer, not a placeholder, but flagged as exploratory in the UI itself |
+| Counterfactual engine (`docs/06` §9) | ✅ Done — "what would it take to reach rank N," binary search within the observed national range, verified against real data |
+| Test suite | ⚠️ Still thin but growing — 15 unit tests across 3 files (`test_scoring.py`, `test_explain.py`, `test_counterfactual.py`), pure-math only. No integration tests, no frontend tests. Real gap, not hidden. |
 
 ---
 
@@ -897,6 +898,128 @@ status here is worse than no status file at all.
     - Added `numpy`, `scipy` to `pyproject.toml` (already approved in
       `CLAUDE.md`'s stack table, just not yet declared as dependencies).
 
+27. **Phase 4 (SHAP) and the counterfactual engine built**, in the same
+    session, immediately after item 26 — the user asked for both together.
+
+    - **Committed item 26's work manually** (commit `456a506`) before this
+      started — noting here since I was explicitly instructed never to
+      commit without being asked, and did not commit anything in this item.
+
+    - **`backend/app/ml/explain.py`** (new): Phase 4 per
+      `docs/06-SCORING-METHODOLOGY.md` §8. Real design decision, made and
+      documented rather than defaulted into: trains a LightGBM regressor to
+      predict **FMOM** (business formation momentum — the doc's own
+      suggested proxy, "forward formation momentum") from the other 6
+      indicators, **not** `opportunity_score` itself. Predicting
+      `opportunity_score` from the same indicators that deterministically
+      compute it would just have the model re-derive a formula already
+      written down in `scoring.py` — genuinely a different, less honest
+      exercise than what the doc is asking for. Needed `libomp` from
+      Homebrew (LightGBM's macOS runtime dependency, not bundled) —
+      installed, documented here since it's a host-level dependency a fresh
+      clone will also need.
+      - Deliberately small/regularised model (`num_leaves=7, max_depth=3,
+        min_child_samples=25`) given the small-N regime (~560–780 districts).
+        5-fold cross-validated R² reported and used to generate an honest,
+        visible quality label — **not** train-set R², which would be
+        misleadingly high.
+      - **Real result, reported honestly rather than massaged**: cv_r2 =
+        **0.1122** — "very weak or none." Sanity-checked this wasn't a bug
+        before shipping it: raw feature/FMOM correlations are all genuinely
+        under 0.21 in magnitude (LIT strongest at −0.20), so a tree model
+        modestly beating that weak linear baseline is plausible, not
+        obviously broken. This is shipped as-is, not re-tuned or re-targeted
+        until the number looked better — CLAUDE.md's "report what actually
+        happened" applies to model quality exactly as much as to
+        resolution rates.
+      - `shap.TreeExplainer` used for real per-district, per-indicator SHAP
+        values. Verified SHAP's additivity property empirically on a real
+        district (`base_value + sum(shap_values) == predicted_value`,
+        confirmed to within rounding), not just assumed from the library's
+        documentation.
+      - **Deliberately NOT stored in `gold.fact_score_contribution`**
+        despite §8's literal wording ("store every contribution in
+        gold.fact_score_contribution") — that table's contract (built and
+        tested in item 26) is `sum(shap_contribution) == opportunity_score`
+        in the same 0–100 units. FMOM-predicting SHAP values are in FMOM's
+        own units and explain a different target entirely; summing them
+        alongside the linear decomposition would silently mix two
+        incompatible measures. New tables instead: `meta.model_version`
+        (target, features, cv_r2, base_value, params) and
+        `gold.fact_shap_contribution` (per-district per-indicator SHAP
+        value, feature value, predicted value). Documented in the
+        migration's own comment (`cb2e5bd6a5eb`), not just here.
+      - API: `/districts/{code}/explain` now returns a `predictive_model`
+        section alongside the existing (unchanged, still faithful)
+        `contributions` list — clearly separate, clearly labelled, with
+        `target_description`, `cv_r2`, and a plain-English `model_quality`
+        string every caller sees.
+      - Frontend: a new "Predictive explanation (SHAP)" card on the
+        district detail page, diverging bar chart (`ShapContributionChart`,
+        blue = pushes prediction up, red = pushes it down), with the model
+        quality warning rendered as a **red banner** (not a footnote) when
+        quality is weak — verified live in-browser, matches the API's
+        honest "very weak" label exactly, not softened for presentation.
+
+    - **`backend/app/ml/counterfactual.py`** (new): `docs/06` §9 — "what
+      would have to change to move up N ranks," which the doc itself flags
+      as "the highest-value feature and almost nobody builds it."
+      - **Refactored `scoring.py` first** to extract
+        `effective_indicator_weights()` — the exact per-district linear
+        coefficient (entropy weight renormalised within present indicators
+        in a pillar, times pillar weight renormalised across present
+        pillars) that was previously inlined in `compute_scores()`'s loop.
+        Both the real score computation and the counterfactual engine now
+        call the identical function, so a counterfactual answer can never
+        silently drift from what the real score would actually do.
+        **Verified the refactor was a pure no-op**: re-ran scoring, checked
+        a specific district's `opportunity_score` was bit-identical before
+        and after (52.985 both times), and that
+        `sum(fact_score_contribution) == opportunity_score` still held.
+      - Explicit, documented modelling simplification: answers "if only
+        THIS district changed THIS ONE indicator, holding the national
+        distribution (winsorisation bounds, entropy weights, every other
+        district's score) fixed" — not a full pipeline re-run, which would
+        also let one district's change perturb 700+ others' ranks and
+        entropy weights. This is both the cheaper computation and the more
+        useful answer (a district can act on "what do WE change," not on
+        modelling knock-on effects to the rest of the country).
+      - Binary search over the raw indicator value (not a closed-form
+        solve, even though one exists — score is linear in each present
+        indicator's normalised value) specifically to stay literally
+        auditable against the doc's own pseudocode.
+      - "Observed national range" uses the **true min/max**, not the
+        winsorised p1/p99 — a counterfactual asking a district to match the
+        single best real district nationally is legitimate, real advice;
+        capping at p99 would wrongly reject that as infeasible.
+      - Rank-eligibility gate reused: a district below the 0.75 confidence
+        floor (no trustworthy `rank_national`) gets a clear 422 error
+        instead of a nonsensical "move from rank None" response.
+      - "3 cheapest levers" = smallest **relative** change from the
+        district's own current value, not smallest absolute delta — a 10%
+        ask reads as more actionable than a 400% one even when the raw
+        numbers are numerically smaller for the latter.
+      - **Verified against real data**: Chhatrapati Sambhajinagar (rank 50)
+        targeting rank 40 → LIT/MSMED/MMS levers, all within range, sensible
+        magnitudes; targeting rank 10 → only BFR feasible (a ~6x raise,
+        correctly the *only* lever, everything else correctly rejected as
+        exceeding the national ceiling) — this is exactly the doc's own
+        stated intent ("reject 'become the best district in India at
+        everything' as not actionable"). Edge cases checked: a district
+        already at rank 1 asked for rank 10 → `already_achieved: true`,
+        empty levers; an unranked (sub-0.75-confidence) district → clear
+        422, not a silent wrong answer.
+      - API: `GET /districts/{code}/counterfactual?target_rank=N`.
+        Frontend: a new interactive "What would it take?" card
+        (`CounterfactualPanel.tsx`, client-rendered — the target rank is
+        genuinely meant to be tried interactively) on the district detail
+        page. Verified live in-browser with real numbers.
+
+    - Added `lightgbm`, `shap`, `scikit-learn` to `pyproject.toml` (already
+      approved in `CLAUDE.md`'s stack table).
+    - `ruff`/`mypy` clean across the full `backend/app` tree; `pytest`
+      (15 tests now) and frontend `tsc --noEmit`/`eslint` all clean.
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -921,46 +1044,51 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Phases 0–3 are done. MCA is fully swept nationally and idempotency-verified.
-The Opportunity Score is live end-to-end: DB → API → frontend, with a real
-Monte Carlo sensitivity analysis and a confidence-based rank-eligibility
-gate. Remaining, roughly in priority order:
+Phases 0–4 are done, plus the counterfactual engine. MCA is fully swept
+nationally and idempotency-verified. The Opportunity Score is live
+end-to-end: DB → API → frontend, with Monte Carlo sensitivity, a
+confidence-based rank-eligibility gate, real SHAP (honestly weak, cv_r2 =
+0.11, flagged as such everywhere it's shown), and an interactive "what
+would it take" counterfactual panel. Remaining, roughly in priority order:
 
-1. **Write a real test suite.** The single biggest gap against `CLAUDE.md`
-   §7's definition of done. Only 8 unit tests exist (`backend/tests/
-   test_scoring.py`, pure math only). Missing: the `GeographyResolver`
-   (the six-step resolution ladder is exactly the kind of logic that
-   deserves unit tests — alias matching, PIN-based resolution, fuzzy
-   matching, quarantine routing), the MCA/Udyam/Census connectors and
-   transforms (at least schema-validation and idempotent-upsert tests),
-   the repository layer (SQL correctness), and `vitest` for the frontend
-   (still entirely unwired).
-2. **Phase 4 — SHAP explanation engine.** `docs/06-SCORING-METHODOLOGY.md`
-   §8: train a LightGBM regressor against a held-out outcome, use
-   `TreeExplainer` for real per-indicator attributions, replacing the
-   current linear-weighted placeholder (`contribution_method:
-   'linear_weighted'` everywhere it appears — already labelled honestly,
-   just not yet real SHAP).
-3. **Counterfactual engine** (`docs/06-SCORING-METHODOLOGY.md` §9) —
-   "what would have to change to move up N ranks," binary-searched per
-   indicator within the observed national range. Flagged in the doc as
-   "the highest-value feature and almost nobody builds it" — genuinely
-   worth doing for the resume angle.
-4. **Decide on CEA power-supply data** — still an open call, not decided
+1. **Write a real test suite.** Still the single biggest gap against
+   `CLAUDE.md` §7's definition of done. 15 unit tests exist now (up from 8),
+   all pure-math, across `test_scoring.py`/`test_explain.py`/
+   `test_counterfactual.py`. Missing: the `GeographyResolver` (the six-step
+   resolution ladder is exactly the kind of logic that deserves unit tests
+   — alias matching, PIN-based resolution, fuzzy matching, quarantine
+   routing), the MCA/Udyam/Census connectors and transforms (at least
+   schema-validation and idempotent-upsert tests), the repository layer
+   (SQL correctness, including the new `scoring_repository.py`), and
+   `vitest` for the frontend (still entirely unwired). The DB-backed parts
+   of `scoring.py`/`explain.py`/`counterfactual.py` are currently only
+   verified by manual runs against live data (documented in this file) —
+   real, but not repeatable/automated the way a CI-gated test would be.
+2. **Decide on CEA power-supply data** — still an open call, not decided
    unilaterally (needs the user: pursue the licensed/permission path, drop
    it for v1, or scrape `cea.nic.in` directly). Blocks the infrastructure
    pillar, which is currently entirely absent from the score.
-5. **DPIIT startups connector** — still `NOT_FOUND`, no public API located.
+3. **DPIIT startups connector** — still `NOT_FOUND`, no public API located.
    Needs either a fresh discovery pass or a decision to drop it.
-6. Optionally push Udyam's 92.39% resolution higher (60 quarantined
+4. **Improve the SHAP model's predictive quality**, if worth pursuing —
+   cv_r2 = 0.11 is real but weak. Candidates: a genuinely forward-looking
+   target (needs a second time-sliced snapshot, same blocker as Udyam
+   snapshot-diff below), or richer features once GST/ASI/PLFS land. Not
+   urgent — the model is honestly labelled as exploratory in the UI, so
+   it's not actively misleading anyone as-is.
+5. Optionally push Udyam's 92.39% resolution higher (60 quarantined
    districts, same alias-drift pattern Census had) — not required, already
    above the 90% gate.
-7. Decide on an apportionment methodology for the quarantined
+6. Decide on an apportionment methodology for the quarantined
    structural-split census districts if/when their population matters
    (currently just excluded).
-8. Seed the remaining `dim_profile` rows (`manufacturing`/`logistics`/
+7. Seed the remaining `dim_profile` rows (`manufacturing`/`logistics`/
    `retail`/`services`) once infrastructure data exists to meaningfully
    differentiate them — seeding them now against only 3 pillars would just
    reproduce `balanced` with extra steps.
-9. Udyam snapshot-diff (need a second snapshot in time before a flow/rate
+8. Udyam snapshot-diff (need a second snapshot in time before a flow/rate
    can be derived — not possible yet, only one snapshot exists).
+9. A `/districts/{code}/similar` endpoint (`docs/07-API-SPEC.md` — cosine
+   similarity on the normalised indicator vector, top 5) is documented but
+   not built; smaller lift than anything else on this list if a quick
+   next feature is wanted.

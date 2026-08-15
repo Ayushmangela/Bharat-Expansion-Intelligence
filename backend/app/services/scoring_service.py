@@ -1,5 +1,6 @@
 """Business logic only, no SQL (docs/02-ARCHITECTURE.md layering rule)."""
 
+from app.ml.counterfactual import compute_counterfactual
 from app.repositories import scoring_repository
 
 DEFAULT_PROFILE = "balanced"
@@ -33,3 +34,7 @@ def get_explain(lgd_district_code: int, profile: str | None) -> dict | None:
 
 def weight_meta() -> dict:
     return scoring_repository.weight_meta()
+
+
+def get_counterfactual(lgd_district_code: int, target_rank: int, profile: str | None) -> dict | None:
+    return compute_counterfactual(lgd_district_code, target_rank, profile or DEFAULT_PROFILE)

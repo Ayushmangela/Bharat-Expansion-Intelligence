@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getDistrict, getDistrictScore } from "@/lib/api";
+import { getDistrict, getDistrictScore, getDistrictExplain } from "@/lib/api";
 import CompanyStatusPieChart from "@/app/components/CompanyStatusPieChart";
 import MonthlyIncorporationsChart from "@/app/components/MonthlyIncorporationsChart";
 import MsmeBarChart from "@/app/components/MsmeBarChart";
 import ContributionBarChart from "@/app/components/ContributionBarChart";
+import ShapContributionChart from "@/app/components/ShapContributionChart";
 import ConfidenceBadge from "@/app/components/ConfidenceBadge";
+import CounterfactualPanel from "@/app/components/CounterfactualPanel";
 import Card from "@/app/components/Card";
 
 const PILLAR_LABELS: Record<string, string> = {
@@ -25,6 +27,8 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
     notFound();
   }
   const scorecard = await getDistrictScore(Number(code)).catch(() => null);
+  const explain = await getDistrictExplain(Number(code)).catch(() => null);
+  const shap = explain?.predictive_model ?? null;
 
   const { geography, company_status_breakdown, msme, monthly_incorporations } = data;
   const totalCompanies = company_status_breakdown.reduce((sum, s) => sum + s.count, 0);
@@ -110,6 +114,51 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
               ))}
             </ul>
           )}
+        </Card>
+      )}
+
+      {shap && (
+        <Card
+          title="Predictive explanation (SHAP)"
+          subtitle={shap.target_description}
+        >
+          <div
+            className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+              shap.cv_r2 !== null && shap.cv_r2 >= 0.5
+                ? "border-[#1baf7a]/30 bg-[#1baf7a]/5 text-[#128a5f]"
+                : shap.cv_r2 !== null && shap.cv_r2 >= 0.2
+                  ? "border-[#eda100]/30 bg-[#eda100]/5 text-[#8a6000]"
+                  : "border-[#e34948]/30 bg-[#e34948]/5 text-[#b93231]"
+            }`}
+          >
+            Model quality: {shap.model_quality} (cross-validated R² = {shap.cv_r2?.toFixed(3) ?? "n/a"}, trained on{" "}
+            {shap.n_train_districts} districts). This is a separate LightGBM model predicting{" "}
+            <span className="font-medium">{shap.target_variable}</span> from the other 6 indicators — it does not
+            explain <span className="font-medium">opportunity_score</span> directly, and its values are not in the
+            same units as the score decomposition above.
+          </div>
+          <div className="flex flex-wrap items-end gap-8 text-sm">
+            <div>
+              <div className="text-lg font-semibold tabular-nums text-ink">{shap.base_value.toFixed(3)}</div>
+              <div className="text-xs text-ink-muted">base value (national average)</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold tabular-nums text-ink">{shap.predicted_value.toFixed(3)}</div>
+              <div className="text-xs text-ink-muted">predicted for this district</div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <ShapContributionChart contributions={shap.contributions} />
+          </div>
+        </Card>
+      )}
+
+      {scorecard?.score && (
+        <Card
+          title="What would it take?"
+          subtitle="Counterfactual — the cheapest single-indicator changes to reach a target national rank, per docs/06-SCORING-METHODOLOGY.md §9."
+        >
+          <CounterfactualPanel lgdDistrictCode={Number(code)} currentRank={scorecard.score.rank_national} />
         </Card>
       )}
 

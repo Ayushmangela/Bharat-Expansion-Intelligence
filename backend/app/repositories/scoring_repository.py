@@ -266,13 +266,83 @@ def _geo_dict(geo: tuple) -> dict:
     }
 
 
+def get_predictive_shap(geo_key: int) -> dict | None:
+    """Phase 4 SHAP, kept deliberately separate from the linear opportunity-
+    score decomposition above — see migration cb2e5bd6a5eb's comment.
+    Predicts FMOM (business formation momentum), not opportunity_score, so
+    its units and its sum are NOT comparable to `contributions` above; that
+    is why this is a distinct section in the API response, not merged into
+    the same list."""
+    conn = get_conn()
+    model_row = conn.execute(
+        "SELECT model_version_id, target_variable, cv_r2, base_value, n_train, trained_at "
+        "FROM meta.model_version WHERE is_active ORDER BY trained_at DESC LIMIT 1"
+    ).fetchone()
+    if model_row is None:
+        conn.close()
+        return None
+    model_version_id, target_variable, cv_r2, base_value, n_train, trained_at = model_row
+
+    rows = conn.execute(
+        """
+        SELECT indicator_code, feature_value, shap_value, predicted_value
+        FROM gold.fact_shap_contribution
+        WHERE geo_key = %s AND model_version_id = %s
+        ORDER BY abs(shap_value) DESC
+        """,
+        (geo_key, model_version_id),
+    ).fetchall()
+    conn.close()
+    if not rows:
+        return None
+
+    cv_r2_f = float(cv_r2) if cv_r2 is not None else None
+    return {
+        "model_version_id": model_version_id,
+        "target_variable": target_variable,
+        "target_description": "Business Formation Momentum (YoY change in new-incorporation rate) — a genuine held-out outcome, not opportunity_score itself",
+        "cv_r2": cv_r2_f,
+        "model_quality": _shap_quality_label(cv_r2_f),
+        "n_train_districts": n_train,
+        "trained_at": trained_at.isoformat(),
+        "base_value": float(base_value),
+        "predicted_value": float(rows[0][3]),
+        "contributions": [
+            {
+                "indicator_code": code,
+                "indicator_name": INDICATOR_NAMES.get(code, code),
+                "feature_value": float(fv) if fv is not None else None,
+                "shap_value": float(sv),
+            }
+            for code, fv, sv, _pv in rows
+        ],
+    }
+
+
+def _shap_quality_label(cv_r2: float | None) -> str:
+    if cv_r2 is None:
+        return "unknown"
+    if cv_r2 >= 0.5:
+        return "moderate-to-strong — reflects real predictive structure"
+    if cv_r2 >= 0.2:
+        return "weak — suggestive only, not strong evidence"
+    return "very weak or none — treat as exploratory, not a reliable explanation"
+
+
 def get_explain(lgd_district_code: int, profile_code: str) -> dict | None:
-    """Linear-weighted decomposition, NOT SHAP — Phase 4 (LightGBM + SHAP
-    TreeExplainer) hasn't run. contribution_method on every row makes this
-    explicit to the caller rather than silently mislabeling it."""
+    """Linear-weighted decomposition of opportunity_score (faithful — sums
+    exactly to the score), plus a separate predictive_model section holding
+    genuine SHAP values from the Phase 4 model (see get_predictive_shap)."""
     scorecard = get_scorecard(lgd_district_code, profile_code)
     if scorecard is None or scorecard.get("score") is None:
         return scorecard
+    conn = get_conn()
+    geo_row = conn.execute(
+        "SELECT geo_key FROM gold.dim_geography WHERE lgd_district_code = %s AND grain='district' AND is_current",
+        (lgd_district_code,),
+    ).fetchone()
+    conn.close()
+    geo_key = geo_row[0] if geo_row else None
     return {
         "lgd_district_code": lgd_district_code,
         "profile": profile_code,
@@ -290,6 +360,7 @@ def get_explain(lgd_district_code: int, profile_code: str) -> dict | None:
             }
             for i in scorecard["indicators"]
         ],
+        "predictive_model": get_predictive_shap(geo_key) if geo_key else None,
         "narrative": None,
         "narrative_available": False,
         "warnings": scorecard["warnings"],
