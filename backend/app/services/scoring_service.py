@@ -38,3 +38,11 @@ def weight_meta() -> dict:
 
 def get_counterfactual(lgd_district_code: int, target_rank: int, profile: str | None) -> dict | None:
     return compute_counterfactual(lgd_district_code, target_rank, profile or DEFAULT_PROFILE)
+
+
+def get_similar_districts(lgd_district_code: int, profile: str | None, limit: int) -> dict | None:
+    return scoring_repository.get_similar_districts(lgd_district_code, profile or DEFAULT_PROFILE, limit)
+
+
+def compare_districts(lgd_district_codes: list[int], profile: str | None) -> dict | None:
+    return scoring_repository.compare_districts(lgd_district_codes, profile or DEFAULT_PROFILE)

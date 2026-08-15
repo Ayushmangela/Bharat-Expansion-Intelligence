@@ -19,10 +19,11 @@ status here is worse than no status file at all.
 | Phase 1 — Geography spine + one KPI | ✅ Done, stress-tested on 2 states |
 | Phase 2 — Full ingestion | ✅ Done — MCA national sweep complete (all 36 states/UTs, 3,599,249 rows, 0 duplicate CINs); Udyam done nationally (92.39% resolution); Census population + literacy/worker tables loaded |
 | Phase 3 — Scoring engine + Opportunity Score | ✅ Done, reduced scope (7 of 22 KPIs — see item 26) |
-| API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`, `/districts/{code}/counterfactual`; Rankings page + scorecard + SHAP + counterfactual sections on district detail |
+| API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`, `/districts/{code}/counterfactual`, `/districts/{code}/similar`; Rankings page + scorecard + SHAP + counterfactual + similar-districts sections on district detail |
 | Phase 4 — SHAP explanation engine | ✅ Done, honestly weak (cv_r2=0.11 — see item 27) — real LightGBM + TreeExplainer, not a placeholder, but flagged as exploratory in the UI itself |
 | Counterfactual engine (`docs/06` §9) | ✅ Done — "what would it take to reach rank N," binary search within the observed national range, verified against real data |
-| Test suite | ⚠️ Growing — 44 tests across 5 files: 23 real fixture-backed tests on the GeographyResolver (item 28) + 6 on the scoring repository incl. the active-weight-version bug class (item 29). Still missing: `district_repository.py` tests, connector/transform tests, and all frontend tests (`vitest` unwired). |
+| Similar districts (`docs/07` API spec) | ✅ Done — cosine similarity on the normalised indicator vector, verified sensible against real data (Delhi Central's nearest neighbours are other metro/business-hub districts) |
+| Test suite | ⚠️ Growing — **61 backend tests** across 6 files (up from 8 at session start) + **frontend `vitest` now wired up** with 6 passing tests (was completely unset up). Still missing: connector/transform tests beyond the MCA CIN diagnostic, and broader frontend component coverage. See item 30. |
 
 ---
 
@@ -1083,10 +1084,60 @@ status here is worse than no status file at all.
       the real `balanced` profile's `weight_version` was untouched
       throughout.
     - `ruff`/`mypy` clean. Full suite: **44 tests passing**.
-    - **Not yet done**: `district_repository.py` tests specifically,
-      connector/transform tests (MCA/Udyam/Census schema validation and
-      idempotent-upsert behaviour), and `vitest` for the frontend — still
-      genuinely missing, listed in priority order in "Next step" below.
+
+30. **Fast-completion push**, per an explicit "just complete this project
+    fast" instruction — no further check-ins requested, so this covers
+    several smaller, independent pieces landed in one session rather than
+    one at a time with a report after each.
+
+    - **`backend/tests/test_district_repository.py`** (new, 8 tests): same
+      commit+cleanup fixture pattern as the scoring repository tests (same
+      reason — `district_repository.py` also opens its own connection
+      internally). Covers state-code filtering, case-insensitive search,
+      empty-result handling, pagination, and — the one that mattered most —
+      **the `_SORTABLE_COLUMNS` whitelist actually resisting SQL
+      injection**: passed `"district_name; DROP TABLE
+      gold.dim_geography;--"` as the `sort` parameter and confirmed the
+      query still ran safely and the table was still there afterward, not
+      just that the whitelist *looks* correct by inspection.
+    - **`backend/tests/test_mca_schema.py`** (new, 9 tests) for
+      `pipeline/schemas/mca.py`'s `is_known_cin_format()` — regression
+      tests for both real bugs this session already found and fixed in
+      that function (the 7-character Telangana foreign-ID shape, and the
+      genuine `"U3691.DL1986PTC025643"` typo found in production), plus a
+      schema-level test proving that typo does **not** crash validation
+      for the rest of the dataframe (the entire reason the check was
+      demoted from a hard Pandera check to a diagnostic in the first
+      place) while confirming the real structural checks (`nullable=False`,
+      `unique=True`) still correctly hard-fail.
+    - **`vitest` wired up for the frontend** — genuinely unset up before
+      this (`CLAUDE.md` §7 names it explicitly as part of the definition of
+      done). Installed `vitest`, `@testing-library/react`,
+      `@testing-library/jest-dom`, `jsdom`, `@vitejs/plugin-react`;
+      `vitest.config.ts` + `vitest.setup.ts` added; `npm test` wired in
+      `package.json`. Two test files as a starting point, not full coverage:
+      `chart-colors.test.ts` (the `formatMonthLabel` pure function) and
+      `ConfidenceBadge.test.tsx` (component rendering, including the exact
+      "Low · 11%" case verified live in-browser earlier this session).
+      Broader component coverage is still a real gap — this is the
+      scaffolding, not the finished job.
+    - **`GET /districts/{code}/similar`** (new): the one `docs/07-API-SPEC.md`
+      endpoint that was documented but never built. Cosine similarity on
+      the normalised indicator vector (`gold.fact_score_contribution`,
+      active weight version) — missing indicators contribute 0 to the dot
+      product rather than being imputed, so districts with little indicator
+      overlap naturally read as less similar instead of a fabricated
+      "average" filling the gap. **Verified against real data, not just
+      "it runs"**: Delhi Central's top-5 nearest neighbours are North
+      Delhi, New Delhi, Gautam Buddha Nagar (Noida), Gurugram, and
+      Bengaluru Rural — all genuine metro/business-hub districts, which is
+      exactly the kind of result that would look wrong if the similarity
+      math had a sign error or a normalisation bug. New "Similar districts"
+      card on the district detail page, verified live in-browser.
+    - `ruff`/`mypy` clean across the backend; `tsc --noEmit`, `eslint`, and
+      `npm test` all clean on the frontend. Full backend suite: **61 tests
+      passing** (up from 8 at the start of this session). Frontend: **6
+      tests passing** (up from 0 — `vitest` didn't exist before this item).
 
 ---
 
@@ -1112,26 +1163,26 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Phases 0–4 are done, plus the counterfactual engine. MCA is fully swept
-nationally and idempotency-verified. The Opportunity Score is live
-end-to-end: DB → API → frontend, with Monte Carlo sensitivity, a
-confidence-based rank-eligibility gate, real SHAP (honestly weak, cv_r2 =
-0.11, flagged as such everywhere it's shown), and an interactive "what
-would it take" counterfactual panel. Remaining, roughly in priority order:
+Phases 0–4 are done, plus the counterfactual engine and the similar-districts
+endpoint. MCA is fully swept nationally and idempotency-verified. The
+Opportunity Score is live end-to-end: DB → API → frontend, with Monte Carlo
+sensitivity, a confidence-based rank-eligibility gate, real SHAP (honestly
+weak, cv_r2 = 0.11, flagged as such everywhere it's shown), an interactive
+"what would it take" counterfactual panel, and cosine-similarity nearest
+neighbours. The full documented `docs/07-API-SPEC.md` district endpoint set
+is now built except `/counterfactual`'s cousin features (`/compare`,
+`/forecast`) — see below. Test suite: 61 backend tests, `vitest` now wired
+up on the frontend with 6 tests. Remaining, roughly in priority order:
 
-1. **Keep building out the test suite.** 44 tests now (up from 8): 23 on the
-   `GeographyResolver` (item 28) and 6 on the scoring repository, including
-   the exact active-weight-version bug class caught in production (item 29).
-   Still missing, in order of value: `district_repository.py` tests (same
-   commit+cleanup pattern as `test_scoring_repository.py`, since it also
-   opens its own connection internally), the MCA/Udyam/Census connectors
-   and transforms (schema-validation and idempotent-upsert behaviour — the
-   CIN-format diagnostic function from `mca.py` is pure and quick to
-   cover), and `vitest` for the frontend (still entirely unwired — needs
-   initial setup, not just test files). The DB-backed parts of
-   `scoring.py`/`explain.py`/`counterfactual.py` are currently only
-   verified by manual runs against live data (documented in this file) —
-   real, but not repeatable/automated the way a CI-gated test would be.
+1. **Keep building out test coverage.** Backend: connector/transform tests
+   beyond the MCA CIN diagnostic (Udyam and Census schema validation,
+   idempotent-upsert behaviour across all three connectors). Frontend:
+   `vitest` has the scaffolding (config + 2 test files) but nowhere near
+   full component coverage — the Rankings table, `CounterfactualPanel`'s
+   interactive fetch logic, and the chart components are all still
+   untested. The DB-backed parts of `scoring.py`/`explain.py`/
+   `counterfactual.py` themselves are still only verified by manual runs
+   against live data (documented in this file), not automated.
 2. **Decide on CEA power-supply data** — still an open call, not decided
    unilaterally (needs the user: pursue the licensed/permission path, drop
    it for v1, or scrape `cea.nic.in` directly). Blocks the infrastructure
@@ -1144,19 +1195,22 @@ would it take" counterfactual panel. Remaining, roughly in priority order:
    snapshot-diff below), or richer features once GST/ASI/PLFS land. Not
    urgent — the model is honestly labelled as exploratory in the UI, so
    it's not actively misleading anyone as-is.
-5. Optionally push Udyam's 92.39% resolution higher (60 quarantined
+5. **`/compare` and `/forecast`** (`docs/07-API-SPEC.md`) — the two
+   remaining documented-but-unbuilt endpoints. `/compare` (aligned
+   indicator-by-indicator diff across 2+ districts) is a straightforward
+   reuse of already-loaded normalised values. `/forecast` needs a real
+   time-series model (ARIMA/exponential smoothing over
+   `fact_district_month`, or similar) — a bigger, separate piece of work,
+   not a quick addition like the others on this list.
+6. Optionally push Udyam's 92.39% resolution higher (60 quarantined
    districts, same alias-drift pattern Census had) — not required, already
    above the 90% gate.
-6. Decide on an apportionment methodology for the quarantined
+7. Decide on an apportionment methodology for the quarantined
    structural-split census districts if/when their population matters
    (currently just excluded).
-7. Seed the remaining `dim_profile` rows (`manufacturing`/`logistics`/
+8. Seed the remaining `dim_profile` rows (`manufacturing`/`logistics`/
    `retail`/`services`) once infrastructure data exists to meaningfully
    differentiate them — seeding them now against only 3 pillars would just
    reproduce `balanced` with extra steps.
-8. Udyam snapshot-diff (need a second snapshot in time before a flow/rate
+9. Udyam snapshot-diff (need a second snapshot in time before a flow/rate
    can be derived — not possible yet, only one snapshot exists).
-9. A `/districts/{code}/similar` endpoint (`docs/07-API-SPEC.md` — cosine
-   similarity on the normalised indicator vector, top 5) is documented but
-   not built; smaller lift than anything else on this list if a quick
-   next feature is wanted.

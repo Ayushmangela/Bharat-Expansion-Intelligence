@@ -61,3 +61,13 @@ def district_counterfactual(
     if "error" in result:
         raise HTTPException(status_code=422, detail=result["error"])
     return result
+
+
+@router.get("/districts/{lgd_district_code}/similar")
+def district_similar(
+    lgd_district_code: int, limit: int = Query(default=5, le=20), profile: str | None = Query(default=None)
+) -> dict:
+    result = scoring_service.get_similar_districts(lgd_district_code, profile, limit)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"district {lgd_district_code} not found or not scored")
+    return result

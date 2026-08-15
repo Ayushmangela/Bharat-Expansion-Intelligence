@@ -1,12 +1,12 @@
 """All SQL for district-level reads lives here (rule: routers never touch
 the database, services never write SQL — docs/02-ARCHITECTURE.md).
 
-This is a PREVIEW-slice repository: real data (company counts, MSME
-breakdowns, geography resolution stats), not the scored/SHAP endpoints in
-docs/07-API-SPEC.md — Phase 3 (scoring) and Phase 4 (SHAP) haven't run yet.
-Uses raw psycopg, consistent with the rest of the pipeline (backend/pipeline/
-already established this pattern) rather than introducing SQLAlchemy ORM
-models for a preview slice — that's a Phase 5 decision, not this one.
+Raw ingested data (company counts, MSME breakdowns, geography resolution
+stats) — the scored Opportunity Score / SHAP / counterfactual endpoints
+live in scoring_repository.py instead. Uses raw psycopg, consistent with
+the rest of the pipeline (backend/pipeline/ already established this
+pattern) rather than introducing SQLAlchemy ORM models for a read-only
+slice — that's a Phase 5 decision, not this one.
 """
 
 import psycopg

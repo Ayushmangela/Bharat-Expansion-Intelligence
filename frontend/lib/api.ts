@@ -247,6 +247,24 @@ export async function getCounterfactual(lgdDistrictCode: number, targetRank: num
   return res.json() as Promise<CounterfactualResult>;
 }
 
+export interface SimilarDistrict {
+  lgd_district_code: number;
+  district_name: string;
+  state_name: string;
+  similarity: number;
+}
+
+export interface SimilarDistrictsResponse {
+  lgd_district_code: number;
+  items: SimilarDistrict[];
+}
+
+export function getSimilarDistricts(lgdDistrictCode: number, limit = 5, profile?: string) {
+  const search = new URLSearchParams({ limit: String(limit) });
+  if (profile) search.set("profile", profile);
+  return getJson<SimilarDistrictsResponse>(`/api/v1/districts/${lgdDistrictCode}/similar?${search.toString()}`);
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) {

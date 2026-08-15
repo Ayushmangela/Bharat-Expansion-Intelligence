@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getDistrict, getDistrictScore, getDistrictExplain } from "@/lib/api";
+import { getDistrict, getDistrictScore, getDistrictExplain, getSimilarDistricts } from "@/lib/api";
 import CompanyStatusPieChart from "@/app/components/CompanyStatusPieChart";
 import MonthlyIncorporationsChart from "@/app/components/MonthlyIncorporationsChart";
 import MsmeBarChart from "@/app/components/MsmeBarChart";
@@ -29,6 +29,7 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
   const scorecard = await getDistrictScore(Number(code)).catch(() => null);
   const explain = await getDistrictExplain(Number(code)).catch(() => null);
   const shap = explain?.predictive_model ?? null;
+  const similar = await getSimilarDistricts(Number(code)).catch(() => null);
 
   const { geography, company_status_breakdown, msme, monthly_incorporations } = data;
   const totalCompanies = company_status_breakdown.reduce((sum, s) => sum + s.count, 0);
@@ -159,6 +160,24 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
           subtitle="Counterfactual — the cheapest single-indicator changes to reach a target national rank, per docs/06-SCORING-METHODOLOGY.md §9."
         >
           <CounterfactualPanel lgdDistrictCode={Number(code)} currentRank={scorecard.score.rank_national} />
+        </Card>
+      )}
+
+      {similar && similar.items.length > 0 && (
+        <Card title="Similar districts" subtitle="Cosine similarity on the normalised indicator vector.">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {similar.items.map((d) => (
+              <Link
+                key={d.lgd_district_code}
+                href={`/districts/${d.lgd_district_code}`}
+                className="rounded-lg border border-hairline/40 bg-page p-3 hover:border-accent/40 hover:bg-accent/5"
+              >
+                <div className="text-sm font-medium text-ink">{d.district_name}</div>
+                <div className="text-xs text-ink-muted">{d.state_name}</div>
+                <div className="mt-1 text-xs tabular-nums text-ink-secondary">{(d.similarity * 100).toFixed(1)}% similar</div>
+              </Link>
+            ))}
+          </div>
         </Card>
       )}
 
