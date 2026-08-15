@@ -226,8 +226,33 @@ Status values: `PENDING` · `VERIFIED` · `NOT_FOUND` · `BROKEN`
     free of charge if accurate, not misleading, and attributed — but this
     isn't the GODL-India badge data.gov.in resources carry. Cite it as ORGI's
     own attribution-required reuse policy in `ATTRIBUTIONS.md`, not as GODL.
-  - Not yet loaded into the pipeline — this is a Phase 2 discovery result,
-    wiring up the actual connector/transform is separate follow-up work.
+  - **Loaded** (`pipeline/connectors/census_literacy.py`,
+    `pipeline/transforms/census_literacy_silver.py`): 640 district rows
+    fetched, **97.5% resolved** to LGD codes (547 exact + 77 alias matches,
+    16 genuinely unresolved). The 16 include a new category not seen in the
+    population table: **10 rows filed under "ANDHRA PRADESH"** (Adilabad,
+    Hyderabad, Karimnagar, Khammam, Mahbubnagar, Medak, Nalgonda, Nizamabad,
+    Rangareddy, Warangal) that are actually Telangana's *original* pre-2014
+    district boundaries — Census 2011 predates Telangana's creation (June
+    2014) entirely, and those 10 undivided-AP districts were later split
+    again into Telangana's current ~33 districts in 2016. Two structural
+    changes deep from the 2011 boundaries, correctly left quarantined rather
+    than force-aliased to any single current district (same reasoning as the
+    other genuine splits below).
+  - **`silver.census_literacy_worker_district.population_6plus`
+    (total − under-6) is now used as `compute_bfr.py`'s denominator**,
+    replacing the earlier total-population proxy — still not literally
+    "working-age (15-59)" since this table has no clean age-15-59 bucket
+    either, but a real, honestly-labelled improvement (the output field is
+    explicitly named `population_6plus`, never `working_age`, so it can't be
+    silently mistaken for the KPI's literal definition).
+  - Fetched via `curl` subprocess, not httpx directly — censusindia.gov.in's
+    TLS certificate chain fails verification against Python's bundled
+    certifi store (confirmed: even a bare `ssl.create_default_context()`
+    fails) but validates against macOS's system trust store, which curl
+    uses. This is a working, still-verifying certificate path for a server
+    whose own chain configuration Python's cert bundle doesn't fully cover —
+    not a verification bypass.
 - **Tag everything from this source with vintage = 2011.**
 
 ### S_PINCODE_DIR — All India Pincode Directory (added in Phase 1, not Phase 0)
