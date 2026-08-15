@@ -67,6 +67,115 @@ export interface DistrictDetail {
   monthly_incorporations: { month: string; count: number }[];
 }
 
+export interface RankingItem {
+  lgd_district_code: number;
+  district_name: string;
+  state_name: string;
+  lgd_state_code: number;
+  opportunity_score: number;
+  rank_national: number | null;
+  rank_within_state: number | null;
+  rank_ci_low: number | null;
+  rank_ci_high: number | null;
+  confidence_score: number;
+  confidence_band: "High" | "Moderate" | "Low" | "Unknown";
+  indicators_used: number;
+  indicators_total: number;
+}
+
+export interface RankingsResponse {
+  items: RankingItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  profile_code: string;
+  weight_version_id?: number;
+  computed: boolean;
+}
+
+export interface RankingsMeta {
+  active_versions: {
+    profile_code: string;
+    weight_version_id: number;
+    method: string;
+    weights: Record<string, number>;
+    created_at: string;
+  }[];
+  scope_note: string;
+}
+
+export interface DistrictScorecard {
+  geography: DistrictDetail["geography"] & { centroid: { lat: number; lon: number } | null };
+  score: {
+    opportunity_score: number;
+    profile: string;
+    rank_national: number | null;
+    rank_within_state: number | null;
+    rank_ci_low: number | null;
+    rank_ci_high: number | null;
+    confidence_score: number;
+    confidence_band: "High" | "Moderate" | "Low" | "Unknown";
+    indicators_used: number;
+    indicators_total: number;
+    weight_version_id: number;
+    computed_at: string;
+  } | null;
+  pillars?: {
+    economic: number | null;
+    ecosystem: number | null;
+    infrastructure: number | null;
+    human_capital: number | null;
+  };
+  indicators?: {
+    code: string;
+    name: string;
+    raw_value: number | null;
+    unit: string;
+    normalised_value: number | null;
+    contribution: number;
+    contribution_method: string;
+    is_imputed: boolean;
+    is_inherited: boolean;
+    source_code: string;
+  }[];
+  warnings: string[];
+}
+
+export function listRankings(
+  params: {
+    profile?: string;
+    state_code?: number;
+    q?: string;
+    min_score?: number;
+    ranked_only?: boolean;
+    limit?: number;
+    offset?: number;
+    sort?: string;
+    direction?: string;
+  } = {},
+) {
+  const search = new URLSearchParams();
+  if (params.profile) search.set("profile", params.profile);
+  if (params.state_code) search.set("state_code", String(params.state_code));
+  if (params.q) search.set("q", params.q);
+  if (params.min_score !== undefined) search.set("min_score", String(params.min_score));
+  search.set("ranked_only", String(params.ranked_only ?? true));
+  search.set("limit", String(params.limit ?? 50));
+  search.set("offset", String(params.offset ?? 0));
+  if (params.sort) search.set("sort", params.sort);
+  if (params.direction) search.set("direction", params.direction);
+  return getJson<RankingsResponse>(`/api/v1/rankings?${search.toString()}`);
+}
+
+export function getRankingsMeta() {
+  return getJson<RankingsMeta>("/api/v1/rankings/meta");
+}
+
+export function getDistrictScore(lgdDistrictCode: number, profile?: string) {
+  const search = profile ? `?profile=${encodeURIComponent(profile)}` : "";
+  return getJson<DistrictScorecard>(`/api/v1/districts/${lgdDistrictCode}/score${search}`);
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) {

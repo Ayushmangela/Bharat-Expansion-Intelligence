@@ -124,6 +124,10 @@ def capi(conn: psycopg.Connection, period_end: date) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=["geo_key", "paid_up_capital"])
     if df.empty:
         return pd.DataFrame(columns=["CAPI"])
+    # paid_up_capital is NUMERIC in Postgres -> psycopg returns Decimal, which
+    # gives an object-dtype column; downstream numpy math (winsorise, entropy
+    # log) needs float64, so cast explicitly rather than let dtype drift.
+    df["paid_up_capital"] = df["paid_up_capital"].astype(float)
     df["paid_up_capital_lakh"] = df["paid_up_capital"] / 100_000
     out = df.groupby("geo_key")["paid_up_capital_lakh"].median().rename("CAPI").to_frame()
     return out

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MapPinned, DatabaseZap } from "lucide-react";
+import { LayoutDashboard, MapPinned, DatabaseZap, Trophy } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/" },
+  { href: "/rankings", label: "Rankings", icon: Trophy, match: (p: string) => p.startsWith("/rankings") },
   { href: "/districts", label: "Districts", icon: MapPinned, match: (p: string) => p.startsWith("/districts") },
 ];
 
@@ -58,7 +59,7 @@ export default function Sidebar() {
       <div className="mx-3 mb-4 mt-4 rounded-lg border border-hairline/50 bg-page px-3 py-3">
         <div className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Data status</div>
         <div className="mt-1 text-xs text-ink-secondary">
-          Raw ingested data, preview slice — not the scored Opportunity Score product yet.
+          Opportunity Score live — 7 of 22 indicators computable this phase. See Rankings for scope notes.
         </div>
       </div>
     </aside>

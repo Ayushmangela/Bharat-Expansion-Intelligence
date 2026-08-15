@@ -17,7 +17,11 @@ status here is worse than no status file at all.
 |---|---|
 | Phase 0 — Resource discovery | ✅ Done, with 2 known gaps (see below) |
 | Phase 1 — Geography spine + one KPI | ✅ Done, stress-tested on 2 states |
-| Phase 2 — Full ingestion | 🚧 In progress — Udyam connector done (92.39% resolution); MCA still only Goa+Bihar, not the full ~3.67M-row sweep |
+| Phase 2 — Full ingestion | ✅ Done — MCA national sweep complete (all 36 states/UTs, 3,599,249 rows, 0 duplicate CINs); Udyam done nationally (92.39% resolution); Census population + literacy/worker tables loaded |
+| Phase 3 — Scoring engine + Opportunity Score | ✅ Done, reduced scope (7 of 22 KPIs — see item 26) |
+| API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`; new Rankings page + scorecard section on district detail |
+| Phase 4 — SHAP explanation engine | ❌ Not started — contributions are currently linear-weighted, explicitly labelled `contribution_method` |
+| Test suite | ⚠️ Minimal — 8 unit tests on the scoring math only (`backend/tests/test_scoring.py`). No integration tests, no frontend tests. Real gap, not hidden. |
 
 ---
 
@@ -745,6 +749,154 @@ status here is worse than no status file at all.
     - Known gap: no frontend test suite yet (`vitest` isn't wired up) —
       flagged, not fixed, since it's outside a UI-redesign task's scope.
 
+26. **MCA national sweep finished, and Phase 3 (scoring) built end-to-end**,
+    during an autonomous work window. In order:
+
+    - **Telangana's retry completed**: 219,893 fetched, 216,329 loaded,
+      98.38% resolution. That was the last outstanding state — all 36
+      states/UTs are now loaded. **National idempotency re-verified**:
+      3,599,249 total rows in `gold.fact_company`, **zero duplicate CINs**,
+      75,043 rows across all sources sitting in
+      `silver.geography_quarantine` (~97.96% overall resolution).
+
+    - **`backend/app/ml/kpis.py`** (new): computes the 7 KPIs actually
+      loadable this phase — BFR, FMOM, CAPI (economic); MSMED, MMS
+      (ecosystem); POPS, LIT (human capital). The other 15 documented KPIs
+      need GST/DPIIT/ASI/PLFS/RBI/CEA data that isn't loaded — a real scope
+      decision, not an oversight (see migration `475c62829513`'s comment
+      and the scope table above). One real bug caught by actually running
+      it against live data: `capi()`'s `paid_up_capital` column comes back
+      from Postgres as `Decimal` (NUMERIC type), giving an object-dtype
+      pandas column that silently breaks `numpy.log` downstream with a
+      confusing `'float' object has no attribute 'log'` error — fixed by
+      an explicit `.astype(float)` cast at the query boundary, not by
+      papering over it downstream.
+
+    - **`backend/app/ml/scoring.py`** (new): winsorise (p1/p99) → robust
+      min-max normalise (0–100) → entropy-weight → pillar-aggregate →
+      Opportunity Score, per `docs/06-SCORING-METHODOLOGY.md`. Ran **THE
+      CHECKPOINT** from `CLAUDE.md` §8 for real, found it initially failed
+      in a way the doc didn't literally anticipate, and fixed it rather
+      than shipping a broken ranking:
+
+      - **First failure mode (found, fixed)**: districts with only 1 of 7
+        indicators present (tiny/newly-created NE India districts —
+        Niuland, Shamator, Sanchore — hitting a winsorisation ceiling on a
+        single small-N ratio like MMS or the CAPI statutory-minimum value)
+        were landing at **rank #1–3** with **confidence as low as 3–11%**,
+        beating fully-observed metros at 100% confidence. Root cause:
+        within-pillar and within-score weight renormalisation among
+        *present* indicators gives 100% of the weight to whatever's left
+        when most indicators are missing, regardless of how (un)reliable
+        that lone indicator is. **Fix**: a rank-eligibility gate reusing
+        the doc's own §10 confidence bands — a district needs
+        `confidence_score >= 0.75` (the doc's own "Moderate" floor, not an
+        invented number) to receive `rank_national`/`rank_within_state`.
+        Below that floor, `opportunity_score` and `confidence_score` are
+        still computed and shown (nothing hidden), just not ranked. Result:
+        561 of 778 scored districts are ranked; 217 sit below the floor.
+      - **Monte Carlo rank sensitivity** (`docs/06-SCORING-METHODOLOGY.md`
+        §7, marked MANDATORY) implemented — 1,000 trials, entropy weights
+        perturbed ±20%, `rank_ci_low`/`rank_ci_high` = 2.5th/97.5th
+        percentile rank, vectorised across districts per trial (only the
+        1,000-trial loop is Python-level). **Verified empirically that
+        Monte Carlo alone does NOT catch the single-indicator problem
+        above**: a district with exactly one present indicator always gets
+        100% of that pillar's weight regardless of the perturbation
+        magnitude, so its rank CI stays deceptively narrow. This is why
+        the rank-eligibility gate above was needed as a separate,
+        additional fix — don't assume Monte Carlo alone makes thin
+        coverage self-diagnosing, it doesn't.
+      - **Re-ran THE CHECKPOINT after the fix**: top-ranked districts are
+        now Delhi Central, Gurugram, Pune, Gautam Buddha Nagar (Noida),
+        Mumbai, Hyderabad, Bengaluru Urban, Chennai — all confidence
+        94–100%, tight rank CIs. **This is still metro-heavy**, which is
+        the *other* failure mode `CLAUDE.md` §8 explicitly warns about —
+        investigated properly before accepting it: confirmed per-capita
+        normalisation is mechanically correct (BFR divides by real
+        population; Mumbai/Bengaluru — far more populous than central
+        Delhi — rank *below* it, so it isn't simply reproducing a
+        population ranking), and known industrial hubs land in plausible,
+        differentiated positions further down (Surat #13, Coimbatore #21,
+        Indore #22, Rajkot #23, Ludhiana #37, spread across many states).
+        Conclusion: the metro concentration at the very top is real, and
+        matches `CLAUDE.md` §9's own documented, expected limitation —
+        "registered office ≠ place of operation," inflating metro BFR
+        partly through genuine commercial agglomeration and partly through
+        registered-office artefacts that can't be disentangled without
+        ASI/GST data (not loaded this phase). Surfaced, not hidden — see
+        the rankings page's scope banner and this note.
+      - **Contribution decomposition made mathematically faithful**: the
+        first version of the per-indicator `shap_contribution` value used
+        *global* entropy weights, which don't actually match the
+        *per-district renormalised* weights used to compute that
+        district's real score — the bars didn't sum to the number they
+        were supposedly explaining. Rebuilt so contributions are computed
+        with the exact same renormalised weights as the real score;
+        verified for real (Delhi Central: contributions sum to 80.6579 vs
+        `opportunity_score` 80.656, rounding-only difference). This is
+        `CLAUDE.md`'s "the explanation is the product" opening claim taken
+        literally, not decoratively.
+      - `gold.dim_profile` seeded with a `balanced` profile only — weights
+        redistributed evenly across the 3 available pillars
+        (economic/ecosystem/human_capital), since infrastructure has zero
+        computable indicators. `manufacturing`/`logistics`/`retail`/
+        `services` profiles from the doc are not seeded yet (need
+        infrastructure data to meaningfully differentiate).
+      - `meta.weight_version.is_active` is now actually maintained (set
+        `false` on old rows for a profile before inserting the new active
+        one) — without this, `fact_opportunity_score`'s PK including
+        `weight_version_id` means every re-run *adds* a new generation of
+        rows rather than replacing the old one, and a naive query would
+        silently mix generations. Found this the hard way mid-session
+        (duplicate rank-1/2/3 entries from stale runs) before it shipped.
+
+    - **New API endpoints** (`backend/app/routers/rankings.py`,
+      `app/services/scoring_service.py`, `app/repositories/
+      scoring_repository.py`), following the existing router→service→
+      repository layering: `GET /api/v1/rankings` (paginated, filterable,
+      `ranked_only` defaults true), `GET /api/v1/rankings/meta` (active
+      weight versions + scope note), `GET /api/v1/districts/{code}/score`
+      (full scorecard — geography, score, pillars, indicators), `GET
+      /api/v1/districts/{code}/explain` (linear-weighted contributions,
+      explicitly labelled, not SHAP). All queries join through the active
+      `weight_version_id` so stale generations never leak into a response.
+
+    - **New frontend**: `/rankings` page (sortable table, state filter,
+      search, confidence badges, rank CI column, a scope-note banner with
+      a toggle to reveal unranked districts) and a new Opportunity Score
+      card on the district detail page (score, rank + CI, pillar tiles,
+      a `ContributionBarChart` — horizontal Recharts bar chart of the
+      score-point decomposition that sums to the displayed score — and
+      inline warnings). Verified live in-browser (not just "should work"):
+      ranked list renders correctly, an unranked low-confidence district
+      (Niuland) correctly shows "Unranked" with its reason spelled out,
+      no console errors beyond the harmless dev-mode HMR websocket
+      message. `npx tsc --noEmit` and `eslint` both clean on the new files.
+
+    - **First-ever test suite for the project**: `backend/tests/
+      test_scoring.py`, 8 unit tests on the pure-math functions
+      (`winsorise`, `robust_minmax`, `entropy_weights`) — no DB needed.
+      Deliberately does *not* mock the DB-backed parts of
+      `compute_scores()`, since a mocked connection wouldn't have caught
+      the real `Decimal`-dtype bug found this session; that logic is
+      instead verified by actually running it against live data (see
+      above). One test's own premise was wrong on first run — assumed
+      winsorisation would leave a small, evenly-spaced series completely
+      untouched, but percentile interpolation always nudges the global
+      min/max slightly for continuous unique-valued data (that's correct
+      behaviour, not a bug) — caught by actually running the test rather
+      than assuming it would pass, then fixed the test's assumption, not
+      the code. `pytest` is now runnable from the repo root
+      (`[tool.pytest.ini_options]` added to `pyproject.toml`). **This is
+      still a minimal suite** — no integration tests, no frontend tests,
+      no coverage of the geography resolver, connectors, or repositories.
+      Flagged as the most significant remaining gap against `CLAUDE.md`
+      §7's definition of done, not hidden.
+
+    - Added `numpy`, `scipy` to `pyproject.toml` (already approved in
+      `CLAUDE.md`'s stack table, just not yet declared as dependencies).
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -769,24 +921,46 @@ status here is worse than no status file at all.
 
 ## Next step, concretely
 
-Phase 1 is solid (checkpoint met, stress-tested on two states, Census join
-routed through the resolver). Phase 2 has started: Udyam is done nationally
-(92.39% resolution, real numbers in `gold.fact_district_month`). Remaining:
+Phases 0–3 are done. MCA is fully swept nationally and idempotency-verified.
+The Opportunity Score is live end-to-end: DB → API → frontend, with a real
+Monte Carlo sensitivity analysis and a confidence-based rank-eligibility
+gate. Remaining, roughly in priority order:
 
-1. **MCA full sweep across all ~36 states/UTs** (~3.67M rows) — the biggest
-   remaining piece. The connector already supports this per-state
-   (`pipeline/connectors/mca.py`, checkpointed/resumable); just needs to loop
-   every state instead of Goa/Bihar. Will take a while given the politeness
-   rate limit (0.7 req/s) — budget for it, don't rush it.
-2. Optionally push Udyam's 92.39% higher with an alias batch for the 60
-   quarantined districts (same spelling/abbreviation-drift pattern Census
-   had) — not required, already above the 90% gate.
-3. Decide whether to spend a follow-up discovery session on the two Phase 0 gaps
-   (Census literacy/worker-classification — needed to turn BFR from a
-   total-population proxy into the KPI as formally defined; CEA power supply).
-4. Decide on an apportionment methodology for the 8 quarantined structural-split
-   census districts if/when their population matters (currently just excluded).
-5. Remaining Phase 2 items once MCA's full sweep lands: Udyam snapshot-diff
-   (need a second snapshot before a flow can be derived — not possible yet,
-   only one snapshot exists), all five validation gates wired, idempotency
-   re-verified at full national scale.
+1. **Write a real test suite.** The single biggest gap against `CLAUDE.md`
+   §7's definition of done. Only 8 unit tests exist (`backend/tests/
+   test_scoring.py`, pure math only). Missing: the `GeographyResolver`
+   (the six-step resolution ladder is exactly the kind of logic that
+   deserves unit tests — alias matching, PIN-based resolution, fuzzy
+   matching, quarantine routing), the MCA/Udyam/Census connectors and
+   transforms (at least schema-validation and idempotent-upsert tests),
+   the repository layer (SQL correctness), and `vitest` for the frontend
+   (still entirely unwired).
+2. **Phase 4 — SHAP explanation engine.** `docs/06-SCORING-METHODOLOGY.md`
+   §8: train a LightGBM regressor against a held-out outcome, use
+   `TreeExplainer` for real per-indicator attributions, replacing the
+   current linear-weighted placeholder (`contribution_method:
+   'linear_weighted'` everywhere it appears — already labelled honestly,
+   just not yet real SHAP).
+3. **Counterfactual engine** (`docs/06-SCORING-METHODOLOGY.md` §9) —
+   "what would have to change to move up N ranks," binary-searched per
+   indicator within the observed national range. Flagged in the doc as
+   "the highest-value feature and almost nobody builds it" — genuinely
+   worth doing for the resume angle.
+4. **Decide on CEA power-supply data** — still an open call, not decided
+   unilaterally (needs the user: pursue the licensed/permission path, drop
+   it for v1, or scrape `cea.nic.in` directly). Blocks the infrastructure
+   pillar, which is currently entirely absent from the score.
+5. **DPIIT startups connector** — still `NOT_FOUND`, no public API located.
+   Needs either a fresh discovery pass or a decision to drop it.
+6. Optionally push Udyam's 92.39% resolution higher (60 quarantined
+   districts, same alias-drift pattern Census had) — not required, already
+   above the 90% gate.
+7. Decide on an apportionment methodology for the quarantined
+   structural-split census districts if/when their population matters
+   (currently just excluded).
+8. Seed the remaining `dim_profile` rows (`manufacturing`/`logistics`/
+   `retail`/`services`) once infrastructure data exists to meaningfully
+   differentiate them — seeding them now against only 3 pillars would just
+   reproduce `balanced` with extra steps.
+9. Udyam snapshot-diff (need a second snapshot in time before a flow/rate
+   can be derived — not possible yet, only one snapshot exists).

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getOverview, listStates } from "@/lib/api";
 import { Building2, MapPinned, Globe2, AlertTriangle } from "lucide-react";
 import TopDistrictsChart from "@/app/components/TopDistrictsChart";
@@ -15,8 +16,11 @@ export default async function OverviewPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ink">National Overview</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
-          Raw ingested data as loaded so far — this is a preview slice, not the scored/SHAP
-          Opportunity Score product (Phase 3/4 haven&apos;t run yet). See{" "}
+          Raw ingested data, nationally complete for MCA/Udyam/Census. The scored{" "}
+          <Link href="/rankings" className="font-medium text-accent hover:underline">
+            Opportunity Score rankings
+          </Link>{" "}
+          are live (7 of 22 documented indicators — SHAP explanation is Phase 4, not yet built). See{" "}
           <code className="rounded bg-ink/5 px-1 py-0.5 text-xs">STATUS.md</code> for what&apos;s real vs.
           simplified.
         </p>

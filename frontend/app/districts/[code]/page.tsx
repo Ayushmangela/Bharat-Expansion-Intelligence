@@ -1,11 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getDistrict } from "@/lib/api";
+import { getDistrict, getDistrictScore } from "@/lib/api";
 import CompanyStatusPieChart from "@/app/components/CompanyStatusPieChart";
 import MonthlyIncorporationsChart from "@/app/components/MonthlyIncorporationsChart";
 import MsmeBarChart from "@/app/components/MsmeBarChart";
+import ContributionBarChart from "@/app/components/ContributionBarChart";
+import ConfidenceBadge from "@/app/components/ConfidenceBadge";
 import Card from "@/app/components/Card";
+
+const PILLAR_LABELS: Record<string, string> = {
+  economic: "Economic",
+  ecosystem: "Ecosystem",
+  infrastructure: "Infrastructure",
+  human_capital: "Human Capital",
+};
 
 export default async function DistrictDetailPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -15,6 +24,7 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
   } catch {
     notFound();
   }
+  const scorecard = await getDistrictScore(Number(code)).catch(() => null);
 
   const { geography, company_status_breakdown, msme, monthly_incorporations } = data;
   const totalCompanies = company_status_breakdown.reduce((sum, s) => sum + s.count, 0);
@@ -34,6 +44,74 @@ export default async function DistrictDetailPage({ params }: { params: Promise<{
           {geography.state_name} · LGD district code {geography.lgd_district_code}
         </p>
       </div>
+
+      {scorecard?.score && (
+        <Card
+          title="Opportunity Score"
+          subtitle="Score decomposes into the indicator contributions below — see docs/06-SCORING-METHODOLOGY.md."
+          action={<ConfidenceBadge band={scorecard.score.confidence_band} score={scorecard.score.confidence_score} />}
+        >
+          <div className="flex flex-wrap items-end gap-8">
+            <div>
+              <div className="text-4xl font-semibold tabular-nums text-ink">{scorecard.score.opportunity_score.toFixed(1)}</div>
+              <div className="text-xs text-ink-muted">out of 100 · profile: {scorecard.score.profile}</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold tabular-nums text-ink">
+                {scorecard.score.rank_national ? `#${scorecard.score.rank_national}` : "Unranked"}
+              </div>
+              <div className="text-xs text-ink-muted">
+                national rank
+                {scorecard.score.rank_ci_low && scorecard.score.rank_ci_high
+                  ? ` (95% CI: ${scorecard.score.rank_ci_low}–${scorecard.score.rank_ci_high})`
+                  : ""}
+              </div>
+            </div>
+            {scorecard.score.rank_within_state && (
+              <div>
+                <div className="text-lg font-semibold tabular-nums text-ink">#{scorecard.score.rank_within_state}</div>
+                <div className="text-xs text-ink-muted">within {geography.state_name}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-lg font-semibold tabular-nums text-ink">
+                {scorecard.score.indicators_used}/{scorecard.score.indicators_total}
+              </div>
+              <div className="text-xs text-ink-muted">indicators present</div>
+            </div>
+          </div>
+
+          {scorecard.pillars && (
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Object.entries(scorecard.pillars).map(([key, value]) => (
+                <div key={key} className="rounded-lg border border-hairline/40 bg-page p-3">
+                  <div className="text-xs text-ink-muted">{PILLAR_LABELS[key] ?? key}</div>
+                  <div className="mt-1 text-lg font-semibold tabular-nums text-ink">
+                    {value !== null ? value.toFixed(1) : <span className="text-sm font-normal text-ink-muted">not computable</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {scorecard.indicators && (
+            <div className="mt-5">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                Contribution to score (score-points, sums to {scorecard.score.opportunity_score.toFixed(1)})
+              </div>
+              <ContributionBarChart indicators={scorecard.indicators} />
+            </div>
+          )}
+
+          {scorecard.warnings.length > 0 && (
+            <ul className="mt-4 space-y-1 border-t border-hairline/40 pt-3 text-xs text-ink-muted">
+              {scorecard.warnings.map((w, i) => (
+                <li key={i}>⚠ {w}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Card title={`Company status (${totalCompanies.toLocaleString()} total)`}>
         {totalCompanies === 0 ? (

@@ -18,6 +18,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyarrow>=17.0",
     "openpyxl>=3.1",
+    "numpy>=1.26",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +43,10 @@ ignore = ["DTZ007", "DTZ011"]
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
 
 [build-system]
 requires = ["setuptools>=68"]

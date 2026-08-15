@@ -20,8 +20,6 @@ RBI/road data not loaded). pillar_infrastructure is NULL on every row.
 Pillar weights are redistributed across the 3 available pillars.
 """
 
-from datetime import date
-
 import numpy as np
 import pandas as pd
 import psycopg
@@ -32,6 +30,14 @@ from app.ml.kpis import INDICATOR_META, compute_all_indicators, reference_month
 
 QUALITY_BIT_IMPUTED = 1
 QUALITY_BIT_WINSORISED = 8
+
+MC_TRIALS = 1000
+MC_PERTURBATION = 0.20
+MC_SEED = 20260815  # fixed seed: reruns on unchanged data must reproduce the same CI, not a new random draw each time
+
+# docs/06-SCORING-METHODOLOGY.md §10's own "Moderate" floor, reused as the
+# rank-eligibility gate — see the comment at its use site in compute_scores().
+RANK_MIN_CONFIDENCE = 0.75
 
 # Redistributed from the doc's 4-pillar table (economic/ecosystem/infrastructure/
 # human_capital) proportionally, since infrastructure has zero computable
@@ -85,6 +91,77 @@ def entropy_weights(normalised_df: pd.DataFrame) -> dict[str, float]:
     return weights
 
 
+def monte_carlo_rank_sensitivity(
+    normalised: pd.DataFrame,
+    indicator_codes: list[str],
+    weights: dict[str, float],
+    pillar_weights: dict[str, float],
+    scored_geo_keys: list[int],
+    n_trials: int = MC_TRIALS,
+) -> pd.DataFrame:
+    """docs/06-SCORING-METHODOLOGY.md §7 — MANDATORY. Perturb entropy weights
+    +/-20% per trial, recompute every district's rank, report the 2.5th/97.5th
+    percentile rank across trials.
+
+    This is what turns "Niuland: rank 1" (built from a single noisy indicator,
+    confidence 0.11) into "Niuland: rank 1 (95% CI: 1-640)" — a wide interval
+    that is itself the finding: a score resting on one indicator is not a
+    stable ranking, and the doc is explicit that publishing the interval,
+    not suppressing the district, is the correct way to surface that.
+
+    Vectorised across districts per trial (only the 1000-trial loop is
+    Python-level) — a per-district Python loop x 1000 trials would be too
+    slow for no benefit, since every district in a trial shares the same
+    perturbed weight draw.
+    """
+    from scipy.stats import rankdata
+
+    df = normalised.loc[scored_geo_keys, indicator_codes]
+    values = df.to_numpy(dtype=float)  # (D, K)
+    present = ~np.isnan(values)
+    values_filled = np.where(present, values, 0.0)
+    base_w = np.array([weights[c] for c in indicator_codes])
+    pillar_of = np.array([INDICATOR_META[c][0] for c in indicator_codes])
+
+    pillars = list(pillar_weights.keys())
+    pillar_idx = {p: np.where(pillar_of == p)[0] for p in pillars}
+    # pillar presence is a data fact, not a per-trial random draw — fixed once
+    pillar_present = {p: present[:, pillar_idx[p]].any(axis=1) for p in pillars if len(pillar_idx[p])}
+
+    rng = np.random.default_rng(MC_SEED)
+    n_districts = values.shape[0]
+    rank_matrix = np.empty((n_trials, n_districts))
+
+    for t in range(n_trials):
+        pw = base_w * (1 + rng.uniform(-MC_PERTURBATION, MC_PERTURBATION, size=base_w.shape[0]))
+
+        pillar_scores = np.full((n_districts, len(pillars)), np.nan)
+        for pi, p in enumerate(pillars):
+            idx = pillar_idx[p]
+            if len(idx) == 0:
+                continue
+            w_matrix = present[:, idx] * pw[idx][None, :]
+            w_sum = w_matrix.sum(axis=1)
+            weighted_val = (values_filled[:, idx] * w_matrix).sum(axis=1)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                pillar_scores[:, pi] = np.where(w_sum > 0, weighted_val / np.where(w_sum > 0, w_sum, 1), np.nan)
+
+        pw_pillar = np.array([pillar_weights[p] for p in pillars])
+        pillar_present_matrix = np.array([pillar_present[p] for p in pillars]).T  # (D, P)
+        w_matrix = pillar_present_matrix * pw_pillar[None, :]
+        w_sum = w_matrix.sum(axis=1)
+        weighted_val = np.nan_to_num(pillar_scores) * w_matrix
+        final_score = weighted_val.sum(axis=1) / np.where(w_sum > 0, w_sum, 1)
+
+        rank_matrix[t, :] = rankdata(-final_score, method="min")
+
+    ci_low = np.percentile(rank_matrix, 2.5, axis=0)
+    ci_high = np.percentile(rank_matrix, 97.5, axis=0)
+    return pd.DataFrame(
+        {"geo_key": scored_geo_keys, "rank_ci_low": ci_low.astype(int), "rank_ci_high": ci_high.astype(int)}
+    ).set_index("geo_key")
+
+
 def compute_scores(profile_code: str = "balanced") -> dict:
     conn = get_conn()
     ref_month = reference_month(conn)
@@ -102,7 +179,7 @@ def compute_scores(profile_code: str = "balanced") -> dict:
             normalised[code] = np.nan
             continue
         clipped, was_clipped = winsorise(series)
-        pillar, direction = INDICATOR_META[code]
+        _pillar, direction = INDICATOR_META[code]
         aligned = clipped if direction == 1 else -clipped
         norm = robust_minmax(aligned)
         normalised[code] = norm.reindex(raw.index)
@@ -113,6 +190,11 @@ def compute_scores(profile_code: str = "balanced") -> dict:
     complete_rows = normalised.dropna()
     weights = entropy_weights(complete_rows) if not complete_rows.empty else dict.fromkeys(indicator_codes, 1 / len(indicator_codes))
 
+    # Deactivate prior versions for this profile first — fact_opportunity_score's
+    # PK includes weight_version_id, so every run inserts a fresh row set rather
+    # than overwriting; is_active is what lets readers (API/queries) find the
+    # current snapshot instead of averaging across scoring-run generations.
+    conn.execute("UPDATE meta.weight_version SET is_active = false WHERE profile_code = %s", (profile_code,))
     weight_row = conn.execute(
         "INSERT INTO meta.weight_version (profile_code, method, weights, is_active) VALUES (%s, %s, %s, true) RETURNING weight_version_id",
         (profile_code, "entropy", Json(weights)),
@@ -128,6 +210,13 @@ def compute_scores(profile_code: str = "balanced") -> dict:
 
     n_scored = 0
     score_rows = []
+    # geo_key -> {indicator_code: contribution in score-points}, using the SAME
+    # per-district renormalised weights that actually produced opportunity_score
+    # below — sum(contributions) == opportunity_score exactly for every district.
+    # This is what makes /districts/{code}/explain faithful rather than
+    # decorative: CLAUDE.md's "the explanation is the product" means the bars
+    # must reconstruct the number, not just gesture at rough importance.
+    contributions_by_geo: dict[int, dict[str, float]] = {}
     for geo_key in normalised.index:
         row = normalised.loc[geo_key]
         present = row.dropna()
@@ -138,6 +227,7 @@ def compute_scores(profile_code: str = "balanced") -> dict:
         # (renormalising indicator weights within the pillar to sum to 1 among
         # what's actually present — docs §5 "weighted average within pillar")
         pillar_scores: dict[str, float] = {}
+        indicator_score_contribution: dict[str, float] = {}
         for pillar_name in ("economic", "ecosystem", "human_capital"):
             pillar_indicators = [c for c in indicator_codes if INDICATOR_META[c][0] == pillar_name and c in present.index]
             if not pillar_indicators:
@@ -146,12 +236,22 @@ def compute_scores(profile_code: str = "balanced") -> dict:
             w = w / w.sum()
             vals = np.array([present[c] for c in pillar_indicators])
             pillar_scores[pillar_name] = float((w * vals).sum())
+            for c, w_i in zip(pillar_indicators, w, strict=True):
+                indicator_score_contribution[c] = float(w_i)  # share within pillar; scaled to score-points below
 
         if not pillar_scores:
             continue
 
         present_pillar_weight = sum(pillar_weights[p] for p in pillar_scores)
         opportunity_score = sum(pillar_scores[p] * pillar_weights[p] for p in pillar_scores) / present_pillar_weight
+
+        for pillar_name in pillar_scores:
+            pw_effective = pillar_weights[pillar_name] / present_pillar_weight
+            for c in indicator_score_contribution:
+                if INDICATOR_META[c][0] != pillar_name:
+                    continue
+                indicator_score_contribution[c] *= pw_effective * present[c]
+        contributions_by_geo[geo_key] = indicator_score_contribution
 
         confidence = sum(weights[c] for c in present.index) / sum(weights.values())
 
@@ -169,15 +269,38 @@ def compute_scores(profile_code: str = "balanced") -> dict:
         )
         n_scored += 1
 
-    # ranks
     scores_df = pd.DataFrame(score_rows).sort_values("opportunity_score", ascending=False).reset_index(drop=True)
-    scores_df["rank_national"] = scores_df.index + 1
 
-    geo_to_state = dict(
+    # Rank-eligibility gate: a district must clear the doc's own §10 "Moderate"
+    # confidence floor (>=0.75) to receive a national/state rank. Without this,
+    # a district with a single present indicator gets 100% of that indicator's
+    # weight renormalised onto it (see monte_carlo_rank_sensitivity docstring)
+    # and can out-rank a fully-observed metro on one noisy small-N ratio —
+    # confirmed happening for real (Niuland/Sanchore/Shamator at rank 1-3,
+    # confidence 0.03-0.11, MMS/CAPI-driven) before this gate was added.
+    # opportunity_score and confidence_score are still computed and stored for
+    # every district — nothing is hidden — only the *rank* is withheld below
+    # the floor, since the doc itself says a Low-confidence number should be
+    # "interpreted with caution," not presented as a credible #1.
+    eligible = scores_df["confidence_score"] >= RANK_MIN_CONFIDENCE
+    scores_df["rank_national"] = pd.NA
+    scores_df.loc[eligible, "rank_national"] = (
+        scores_df.loc[eligible, "opportunity_score"].rank(ascending=False, method="min").astype(int)
+    )
+
+    geo_to_state: dict[int, int] = dict(
         conn.execute("SELECT geo_key, lgd_state_code FROM gold.dim_geography WHERE grain='district' AND is_current").fetchall()
     )
     scores_df["state_code"] = scores_df["geo_key"].map(geo_to_state)
-    scores_df["rank_within_state"] = scores_df.groupby("state_code")["opportunity_score"].rank(ascending=False, method="min").astype(int)
+    scores_df["rank_within_state"] = pd.NA
+    scores_df.loc[eligible, "rank_within_state"] = (
+        scores_df.loc[eligible].groupby("state_code")["opportunity_score"].rank(ascending=False, method="min").astype(int)
+    )
+
+    mc = monte_carlo_rank_sensitivity(
+        normalised, indicator_codes, weights, pillar_weights, scores_df.loc[eligible, "geo_key"].tolist()
+    )
+    scores_df = scores_df.set_index("geo_key").join(mc).reset_index()
 
     for _, r in scores_df.iterrows():
         conn.execute(
@@ -185,8 +308,8 @@ def compute_scores(profile_code: str = "balanced") -> dict:
             INSERT INTO gold.fact_opportunity_score
                 (geo_key, date_key, profile_key, opportunity_score, pillar_economic, pillar_ecosystem,
                  pillar_infrastructure, pillar_human_capital, rank_national, rank_within_state,
-                 confidence_score, indicators_used, indicators_total, weight_version_id)
-            VALUES (%s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s)
+                 rank_ci_low, rank_ci_high, confidence_score, indicators_used, indicators_total, weight_version_id)
+            VALUES (%s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (geo_key, date_key, profile_key, weight_version_id) DO UPDATE SET
                 opportunity_score = EXCLUDED.opportunity_score,
                 pillar_economic = EXCLUDED.pillar_economic,
@@ -194,12 +317,17 @@ def compute_scores(profile_code: str = "balanced") -> dict:
                 pillar_human_capital = EXCLUDED.pillar_human_capital,
                 rank_national = EXCLUDED.rank_national,
                 rank_within_state = EXCLUDED.rank_within_state,
+                rank_ci_low = EXCLUDED.rank_ci_low,
+                rank_ci_high = EXCLUDED.rank_ci_high,
                 confidence_score = EXCLUDED.confidence_score
             """,
             (
                 int(r["geo_key"]), date_key, profile_key, r["opportunity_score"],
                 r["pillar_economic"], r["pillar_ecosystem"], r["pillar_human_capital"],
-                int(r["rank_national"]), int(r["rank_within_state"]),
+                int(r["rank_national"]) if pd.notna(r["rank_national"]) else None,
+                int(r["rank_within_state"]) if pd.notna(r["rank_within_state"]) else None,
+                int(r["rank_ci_low"]) if pd.notna(r["rank_ci_low"]) else None,
+                int(r["rank_ci_high"]) if pd.notna(r["rank_ci_high"]) else None,
                 r["confidence_score"], int(r["indicators_used"]), int(r["indicators_total"]), weight_version_id,
             ),
         )
@@ -208,8 +336,7 @@ def compute_scores(profile_code: str = "balanced") -> dict:
         for code in indicator_codes:
             if pd.isna(normalised.loc[geo_key, code]):
                 continue
-            pillar_name = INDICATOR_META[code][0]
-            contribution = weights[code] * pillar_weights.get(pillar_name, 0) * normalised.loc[geo_key, code] / 100
+            contribution = contributions_by_geo[geo_key][code]
             flags = QUALITY_BIT_WINSORISED if winsorised_flags.loc[geo_key, code] else 0
             conn.execute(
                 """
@@ -235,7 +362,10 @@ def compute_scores(profile_code: str = "balanced") -> dict:
     conn.commit()
     conn.close()
 
-    top10 = scores_df.head(10)[["geo_key", "opportunity_score", "rank_national"]].to_dict("records")
+    ranked = scores_df[scores_df["rank_national"].notna()].sort_values("rank_national")
+    top10 = ranked.head(10)[
+        ["geo_key", "opportunity_score", "rank_national", "rank_ci_low", "rank_ci_high", "confidence_score"]
+    ].to_dict("records")
 
     return {
         "date_key": date_key,
@@ -243,7 +373,8 @@ def compute_scores(profile_code: str = "balanced") -> dict:
         "weight_version_id": weight_version_id,
         "entropy_weights": weights,
         "districts_scored": n_scored,
-        "districts_total_with_any_indicator": len(raw),
+        "districts_ranked": int(eligible.sum()),
+        "districts_below_rank_confidence_floor": int((~eligible).sum()),
         "top_10_geo_keys": top10,
     }
 
