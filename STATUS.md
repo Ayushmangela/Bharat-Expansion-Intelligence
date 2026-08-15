@@ -22,7 +22,7 @@ status here is worse than no status file at all.
 | API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`, `/districts/{code}/counterfactual`; Rankings page + scorecard + SHAP + counterfactual sections on district detail |
 | Phase 4 — SHAP explanation engine | ✅ Done, honestly weak (cv_r2=0.11 — see item 27) — real LightGBM + TreeExplainer, not a placeholder, but flagged as exploratory in the UI itself |
 | Counterfactual engine (`docs/06` §9) | ✅ Done — "what would it take to reach rank N," binary search within the observed national range, verified against real data |
-| Test suite | ⚠️ Growing — 38 tests across 4 files, incl. 23 real fixture-backed tests on the GeographyResolver (see item 28). Still missing: repository-layer SQL tests, connector/transform tests, and all frontend tests (`vitest` unwired). |
+| Test suite | ⚠️ Growing — 44 tests across 5 files: 23 real fixture-backed tests on the GeographyResolver (item 28) + 6 on the scoring repository incl. the active-weight-version bug class (item 29). Still missing: `district_repository.py` tests, connector/transform tests, and all frontend tests (`vitest` unwired). |
 
 ---
 
@@ -1063,11 +1063,30 @@ status here is worse than no status file at all.
         expected value failed until corrected to match what the resolver
         actually persists.
     - `ruff`/`mypy` clean. Full suite: **38 tests passing** (up from 15).
-    - **Not yet done**: repository-layer SQL tests (`district_repository.py`,
-      `scoring_repository.py`), connector/transform tests (MCA/Udyam/Census
-      schema validation and idempotent-upsert behaviour), and `vitest` for
-      the frontend — still genuinely missing, listed in priority order in
-      "Next step" below.
+
+29. **Repository-layer tests added** — `backend/tests/test_scoring_repository.py`,
+    6 tests. `confidence_band()` tested directly (pure). The one integration
+    test that mattered most: seeded a single fake district scored under
+    **two** `weight_version` generations (one active, one not — the exact
+    shape of the real bug caught and fixed in item 26) and asserted
+    `list_rankings()` returns **only** the active one, with the active
+    version's score, not the stale one's.
+    - Different fixture strategy than the resolver tests, and the reason is
+      documented in the file's own docstring: `scoring_repository.py`'s
+      functions call `get_conn()` and open their **own** connection
+      internally rather than accepting an injected one, so a separate
+      connection (like the `db_conn` rollback fixture) can't see this
+      fixture's uncommitted rows. Used real commit + an explicit `finally`
+      cleanup instead, on an obviously-fake `TESTLAND` state/profile
+      (`test_profile_probe`) — and added a standalone test that runs after
+      to confirm cleanup actually left zero rows, plus manually re-verified
+      the real `balanced` profile's `weight_version` was untouched
+      throughout.
+    - `ruff`/`mypy` clean. Full suite: **44 tests passing**.
+    - **Not yet done**: `district_repository.py` tests specifically,
+      connector/transform tests (MCA/Udyam/Census schema validation and
+      idempotent-upsert behaviour), and `vitest` for the frontend — still
+      genuinely missing, listed in priority order in "Next step" below.
 
 ---
 
@@ -1100,20 +1119,19 @@ confidence-based rank-eligibility gate, real SHAP (honestly weak, cv_r2 =
 0.11, flagged as such everywhere it's shown), and an interactive "what
 would it take" counterfactual panel. Remaining, roughly in priority order:
 
-1. **Keep building out the test suite.** 38 tests now (up from 8), including
-   23 real fixture-backed tests on the `GeographyResolver` (item 28) — the
-   single most central, reused piece of logic is now genuinely covered.
-   Still missing, in order of value: the repository layer (SQL correctness
-   — `district_repository.py`, `scoring_repository.py`; same real-DB
-   transaction-rollback pattern as the resolver tests would work here),
-   the MCA/Udyam/Census connectors and transforms (schema-validation and
-   idempotent-upsert behaviour — the CIN-format diagnostic function from
-   `mca.py` is pure and quick to cover), and `vitest` for the frontend
-   (still entirely unwired — needs initial setup, not just test files).
-   The DB-backed parts of `scoring.py`/`explain.py`/`counterfactual.py`
-   are currently only verified by manual runs against live data
-   (documented in this file) — real, but not repeatable/automated the way
-   a CI-gated test would be.
+1. **Keep building out the test suite.** 44 tests now (up from 8): 23 on the
+   `GeographyResolver` (item 28) and 6 on the scoring repository, including
+   the exact active-weight-version bug class caught in production (item 29).
+   Still missing, in order of value: `district_repository.py` tests (same
+   commit+cleanup pattern as `test_scoring_repository.py`, since it also
+   opens its own connection internally), the MCA/Udyam/Census connectors
+   and transforms (schema-validation and idempotent-upsert behaviour — the
+   CIN-format diagnostic function from `mca.py` is pure and quick to
+   cover), and `vitest` for the frontend (still entirely unwired — needs
+   initial setup, not just test files). The DB-backed parts of
+   `scoring.py`/`explain.py`/`counterfactual.py` are currently only
+   verified by manual runs against live data (documented in this file) —
+   real, but not repeatable/automated the way a CI-gated test would be.
 2. **Decide on CEA power-supply data** — still an open call, not decided
    unilaterally (needs the user: pursue the licensed/permission path, drop
    it for v1, or scrape `cea.nic.in` directly). Blocks the infrastructure
