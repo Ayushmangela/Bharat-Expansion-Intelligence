@@ -22,7 +22,7 @@ status here is worse than no status file at all.
 | API + frontend for the score | ✅ Done — `/api/v1/rankings`, `/districts/{code}/score`, `/districts/{code}/explain`, `/districts/{code}/counterfactual`; Rankings page + scorecard + SHAP + counterfactual sections on district detail |
 | Phase 4 — SHAP explanation engine | ✅ Done, honestly weak (cv_r2=0.11 — see item 27) — real LightGBM + TreeExplainer, not a placeholder, but flagged as exploratory in the UI itself |
 | Counterfactual engine (`docs/06` §9) | ✅ Done — "what would it take to reach rank N," binary search within the observed national range, verified against real data |
-| Test suite | ⚠️ Still thin but growing — 15 unit tests across 3 files (`test_scoring.py`, `test_explain.py`, `test_counterfactual.py`), pure-math only. No integration tests, no frontend tests. Real gap, not hidden. |
+| Test suite | ⚠️ Growing — 38 tests across 4 files, incl. 23 real fixture-backed tests on the GeographyResolver (see item 28). Still missing: repository-layer SQL tests, connector/transform tests, and all frontend tests (`vitest` unwired). |
 
 ---
 
@@ -1020,6 +1020,55 @@ status here is worse than no status file at all.
     - `ruff`/`mypy` clean across the full `backend/app` tree; `pytest`
       (15 tests now) and frontend `tsc --noEmit`/`eslint` all clean.
 
+28. **Real tests for the `GeographyResolver`** — the single piece of logic
+    every connector in the whole pipeline depends on, and the biggest single
+    gap flagged in this file's own "next step" list.
+
+    - **`backend/tests/conftest.py`** (new): a `db_conn` fixture — connects
+      to the real Postgres instance (no separate test DB is provisioned)
+      inside a transaction that is **always rolled back**, never committed.
+      This lets tests exercise real SQL behaviour (`pg_trgm`'s
+      `similarity()` genuinely can't be reproduced in pure Python or a
+      mock) without ever risking real data. **Verified this actually holds**
+      after the test run: queried `gold.dim_geography`/
+      `silver.geography_alias` for the fixture's fake rows afterward —
+      zero rows found, confirmed nothing leaked.
+    - **`backend/tests/test_geography_resolver.py`** (new): 23 tests
+      against real fixture data in an obviously-fake `TESTLAND`/`TESTUNION`
+      geography (per `CLAUDE.md`'s own naming rule), covering every one of
+      the resolver's six steps: exact match, alias fallback, both PIN paths
+      (postal directory and LGD local-body), address-substring match at
+      both district and sub-district grain, fuzzy match, and quarantine
+      fallthrough. Explicitly reproduces `CLAUDE.md` rule 8's own named
+      example — same district name ("Test City") in two different fake
+      states, resolving to two different codes, disambiguated correctly by
+      `(state, district)`.
+      - **Found a real, useful thing while writing this, not by inspecting
+        code but by actually running queries**: a single-character typo on
+        a short fixture name like "Test City" scores nowhere near the
+        fuzzy-match threshold (`similarity('Test City','Test Citi') =
+        0.667`, `'Test City'/'Test Ciyt' = 0.538` — both far under 0.85).
+        Trigram similarity scales with string length, so the same *kind* of
+        edit on a longer name clears it easily (verified against a real
+        production alias: `'Chamarajanagar'/'Chamarajanagara' = 0.875`).
+        First fixture attempt used a short name and two tests genuinely
+        failed against real Postgres — not a resolver bug, a wrong
+        assumption in the test — fixed by using a realistically-long
+        fixture district name instead of tuning the threshold or mocking
+        the failure away. Left as a comment in the test file so the next
+        person doesn't repeat the same wrong assumption.
+      - Also caught and fixed a second test-only bug during this same pass:
+        `_learn_alias` stores the **raw** (non-normalised) observed text,
+        not the normalised form — a query using `normalise()` on the
+        expected value failed until corrected to match what the resolver
+        actually persists.
+    - `ruff`/`mypy` clean. Full suite: **38 tests passing** (up from 15).
+    - **Not yet done**: repository-layer SQL tests (`district_repository.py`,
+      `scoring_repository.py`), connector/transform tests (MCA/Udyam/Census
+      schema validation and idempotent-upsert behaviour), and `vitest` for
+      the frontend — still genuinely missing, listed in priority order in
+      "Next step" below.
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -1051,19 +1100,20 @@ confidence-based rank-eligibility gate, real SHAP (honestly weak, cv_r2 =
 0.11, flagged as such everywhere it's shown), and an interactive "what
 would it take" counterfactual panel. Remaining, roughly in priority order:
 
-1. **Write a real test suite.** Still the single biggest gap against
-   `CLAUDE.md` §7's definition of done. 15 unit tests exist now (up from 8),
-   all pure-math, across `test_scoring.py`/`test_explain.py`/
-   `test_counterfactual.py`. Missing: the `GeographyResolver` (the six-step
-   resolution ladder is exactly the kind of logic that deserves unit tests
-   — alias matching, PIN-based resolution, fuzzy matching, quarantine
-   routing), the MCA/Udyam/Census connectors and transforms (at least
-   schema-validation and idempotent-upsert tests), the repository layer
-   (SQL correctness, including the new `scoring_repository.py`), and
-   `vitest` for the frontend (still entirely unwired). The DB-backed parts
-   of `scoring.py`/`explain.py`/`counterfactual.py` are currently only
-   verified by manual runs against live data (documented in this file) —
-   real, but not repeatable/automated the way a CI-gated test would be.
+1. **Keep building out the test suite.** 38 tests now (up from 8), including
+   23 real fixture-backed tests on the `GeographyResolver` (item 28) — the
+   single most central, reused piece of logic is now genuinely covered.
+   Still missing, in order of value: the repository layer (SQL correctness
+   — `district_repository.py`, `scoring_repository.py`; same real-DB
+   transaction-rollback pattern as the resolver tests would work here),
+   the MCA/Udyam/Census connectors and transforms (schema-validation and
+   idempotent-upsert behaviour — the CIN-format diagnostic function from
+   `mca.py` is pure and quick to cover), and `vitest` for the frontend
+   (still entirely unwired — needs initial setup, not just test files).
+   The DB-backed parts of `scoring.py`/`explain.py`/`counterfactual.py`
+   are currently only verified by manual runs against live data
+   (documented in this file) — real, but not repeatable/automated the way
+   a CI-gated test would be.
 2. **Decide on CEA power-supply data** — still an open call, not decided
    unilaterally (needs the user: pursue the licensed/permission path, drop
    it for v1, or scrape `cea.nic.in` directly). Blocks the infrastructure
