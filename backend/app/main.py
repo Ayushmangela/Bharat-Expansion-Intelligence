@@ -8,7 +8,7 @@ app = FastAPI(title="Bharat Expansion Intelligence API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],  # POST needed for /api/v1/compare — GET-only silently broke its CORS preflight
     allow_headers=["*"],
 )
 

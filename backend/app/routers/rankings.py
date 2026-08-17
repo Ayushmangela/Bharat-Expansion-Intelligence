@@ -7,10 +7,16 @@ the caller rather than presenting a full 22-indicator score.
 """
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.services import scoring_service
 
 router = APIRouter(prefix="/api/v1", tags=["scoring"])
+
+
+class CompareRequest(BaseModel):
+    district_codes: list[int]
+    profile: str | None = None
 
 
 @router.get("/rankings")
@@ -70,4 +76,16 @@ def district_similar(
     result = scoring_service.get_similar_districts(lgd_district_code, profile, limit)
     if result is None:
         raise HTTPException(status_code=404, detail=f"district {lgd_district_code} not found or not scored")
+    return result
+
+
+@router.post("/compare")
+def compare_districts(body: CompareRequest) -> dict:
+    if len(body.district_codes) < 2:
+        raise HTTPException(status_code=422, detail="at least 2 district_codes are required to compare")
+    result = scoring_service.compare_districts(body.district_codes, body.profile)
+    if result is None:
+        raise HTTPException(status_code=404, detail="no scoring run found for this profile")
+    if "error" in result:
+        raise HTTPException(status_code=422, detail=result["error"])
     return result

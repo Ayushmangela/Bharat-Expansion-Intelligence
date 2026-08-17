@@ -23,7 +23,8 @@ status here is worse than no status file at all.
 | Phase 4 — SHAP explanation engine | ✅ Done, honestly weak (cv_r2=0.11 — see item 27) — real LightGBM + TreeExplainer, not a placeholder, but flagged as exploratory in the UI itself |
 | Counterfactual engine (`docs/06` §9) | ✅ Done — "what would it take to reach rank N," binary search within the observed national range, verified against real data |
 | Similar districts (`docs/07` API spec) | ✅ Done — cosine similarity on the normalised indicator vector, verified sensible against real data (Delhi Central's nearest neighbours are other metro/business-hub districts) |
-| Test suite | ⚠️ Growing — **61 backend tests** across 6 files (up from 8 at session start) + **frontend `vitest` now wired up** with 6 passing tests (was completely unset up). Still missing: connector/transform tests beyond the MCA CIN diagnostic, and broader frontend component coverage. See item 30. |
+| Compare districts (`docs/07` API spec) | ✅ Done, backend + frontend — `POST /api/v1/compare` + `/compare` page. Two real bugs found and fixed building this: a tie-handling logic bug (item 31) and a CORS `allow_methods` gap that silently broke every POST endpoint (item 32) — the API spec's whole documented district-endpoint set is now built except `/forecast`. |
+| Test suite | ⚠️ Growing — **83 backend tests** across 7 files (up from 8 at session start) + **frontend `vitest`** with 6 passing tests (was completely unset up). Still missing: full connector pipeline integration tests (pure parsing helpers are covered; the row-by-row DB loops aren't), and broader frontend component coverage. |
 
 ---
 
@@ -1139,6 +1140,96 @@ status here is worse than no status file at all.
       passing** (up from 8 at the start of this session). Frontend: **6
       tests passing** (up from 0 — `vitest` didn't exist before this item).
 
+31. **`POST /api/v1/compare`** — the last remaining documented-but-unbuilt
+    endpoint from `docs/07-API-SPEC.md` short of `/forecast` (a genuinely
+    bigger, separate piece of work — needs a real time-series model, not
+    just query assembly over already-loaded data). Aligned
+    indicator-by-indicator diff across 2+ districts, plus a data-derived
+    `trade_off_summary` (overall score leader, per-indicator lead counts) —
+    **never generated prose**, only facts the response's own numbers
+    already show, consistent with this project's "explanation is the
+    product" stance throughout.
+    - **Found and fixed a real correctness bug while testing this against
+      live data**, not by inspection: Delhi Central and a comparison
+      district both genuinely tie at `normalised_value=100.0` on CAPI (the
+      same statutory-minimum-paid-up-capital ceiling effect documented
+      earlier this session in item 26) — the first version's `max()`-based
+      "leader" pick silently chose one side of that tie and reported it as
+      a real lead, which is exactly the kind of small dishonesty this
+      project's constitution warns against. Fixed: `leader` is now `None`
+      whenever the top value isn't unique, with a comment explaining why.
+      **Regression test added specifically for the tie case**
+      (`test_ties_are_not_misreported_as_a_lead`), seeding two fake
+      districts with a deliberately-tied indicator — not just testing the
+      easy "one side clearly wins" path.
+    - `backend/tests/test_scoring_repository.py` grew from 6 to 9 tests
+      (clear-leader case, tie case, and the fewer-than-2-valid-districts
+      error path), same commit+cleanup fixture pattern as before, cleanup
+      verified afterward, real `balanced` profile confirmed untouched.
+    - Backend-only for now — no frontend UI built for this one (a
+      multi-district picker + comparison table is a real, separate UI
+      piece; the API is complete and tested, the UI isn't, and that's
+      stated here rather than silently left out).
+    - `ruff`/`mypy` clean. Full backend suite: **64 tests passing**.
+
+32. **Kept going per an explicit "do whatever you want" instruction** — no
+    check-in between these, landed as one batch:
+
+    - **`backend/tests/test_transform_parsers.py`** (new, 19 tests): the
+      small pure parsing helpers scattered across the MCA/Udyam/Census
+      transforms — `mca_silver.parse_capital()`/`extract_pin()`,
+      `udyam_silver.parse_int()`, `census_literacy_silver.parse_int()`.
+      These parse the messiest part of the whole pipeline (loose,
+      inconsistently-formatted government source strings), and the two
+      `parse_int` implementations turned out to have genuinely different
+      edge-case behaviour (Udyam's expects pre-stringified values; Census
+      literacy's is built to receive raw pandas/numpy NaN directly) — both
+      covered, not just one copy-pasted onto the other. Full pipeline
+      integration tests (feeding fake bronze parquet through `transform()`)
+      were deliberately not attempted — a much bigger lift for less
+      marginal value than the resolver/repository tests already delivered.
+    - **`POST /api/v1/compare` frontend UI** (`frontend/app/compare/page.tsx`,
+      new): search-as-you-type district picker (reuses the existing
+      `/api/v1/districts?q=` endpoint, debounce-free since it's cheap),
+      chips for 2–5 selected districts, an aligned indicator table, and the
+      trade-off summary. New `/compare` nav entry.
+      - **Found and fixed a real state-management bug while testing it**:
+        `addDistrict`/`removeDistrict` read `selected` from the
+        render-time closure (`setSelected([...selected, d])`) rather than
+        React's functional update form. A normal user's sequential clicks
+        wouldn't hit this (each click gets its own render), but it's a
+        latent correctness gap all the same — fixed to
+        `setSelected(prev => ...)`, which is correct regardless of how
+        clicks are batched.
+      - **Found and fixed a real backend bug this UI exposed that nothing
+        before it had**: the FastAPI CORS middleware
+        (`backend/app/main.py`) was configured `allow_methods=["GET"]` —
+        correct for every endpoint built so far, since they were all GET,
+        but silently wrong the moment a POST endpoint (`/api/v1/compare`)
+        existed. The browser's CORS preflight `OPTIONS` request came back
+        400, and the actual POST never even left the browser
+        (`net::ERR_FAILED`, "Failed to fetch") — caught by actually running
+        the feature end-to-end in-browser, not by code review, since
+        nothing about the Python code itself was wrong. Fixed:
+        `allow_methods=["GET", "POST"]`.
+      - Verified the fix in a **brand-new browser tab** (zero prior
+        console history) specifically to rule out stale/cached error
+        messages from the pre-fix attempts — confirmed genuinely zero
+        console errors and a correct end-to-end flow (search → add two
+        districts → compare → tied indicator correctly shown as untied →
+        no false leader).
+    - `ruff`/`mypy` clean on the backend; `tsc --noEmit`/`eslint` clean on
+      the frontend. Full backend suite: **83 tests passing** (up from 64).
+      Frontend: still 6 (no new frontend unit tests added this item — the
+      compare page was verified live in-browser instead, same as the
+      counterfactual panel and SHAP card were).
+    - **Still not decided, and not decided unilaterally despite the "do
+      whatever you want" instruction**: CEA licensing, DPIIT sourcing, and
+      the census apportionment methodology all remain open — these are
+      flagged in `CLAUDE.md` §6 as needing a real conversation (licensing
+      and scope implications), not something "do whatever you want" was
+      read as authorising a unilateral call on.
+
 ---
 
 ## Environment notes for whoever runs this next
@@ -1195,13 +1286,13 @@ up on the frontend with 6 tests. Remaining, roughly in priority order:
    snapshot-diff below), or richer features once GST/ASI/PLFS land. Not
    urgent — the model is honestly labelled as exploratory in the UI, so
    it's not actively misleading anyone as-is.
-5. **`/compare` and `/forecast`** (`docs/07-API-SPEC.md`) — the two
-   remaining documented-but-unbuilt endpoints. `/compare` (aligned
-   indicator-by-indicator diff across 2+ districts) is a straightforward
-   reuse of already-loaded normalised values. `/forecast` needs a real
-   time-series model (ARIMA/exponential smoothing over
-   `fact_district_month`, or similar) — a bigger, separate piece of work,
-   not a quick addition like the others on this list.
+5. **`/compare` frontend UI + `/forecast` backend** — `/compare`'s API is
+   done (item 31); still needs a multi-district picker + comparison table
+   on the frontend. `/forecast` is the one remaining documented endpoint
+   with no backend at all — needs a real time-series model
+   (ARIMA/exponential smoothing over `fact_district_month`, or similar), a
+   bigger, separate piece of work, not a quick addition like the others on
+   this list.
 6. Optionally push Udyam's 92.39% resolution higher (60 quarantined
    districts, same alias-drift pattern Census had) — not required, already
    above the 90% gate.

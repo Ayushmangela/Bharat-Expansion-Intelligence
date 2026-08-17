@@ -304,3 +304,41 @@ export function getDistrict(lgdDistrictCode: number) {
 export function listStates() {
   return getJson<{ items: StateSummary[] }>("/api/v1/states").then((r) => r.items);
 }
+
+export interface CompareDistrictSummary {
+  lgd_district_code: number;
+  district_name: string;
+  state_name: string;
+  opportunity_score: number | null;
+  rank_national: number | null;
+}
+
+export interface CompareIndicator {
+  indicator_code: string;
+  name: string;
+  values: Record<string, { raw_value: number | null; normalised_value: number | null }>;
+  leader: number | null;
+}
+
+export interface CompareResponse {
+  districts: CompareDistrictSummary[];
+  indicators: CompareIndicator[];
+  trade_off_summary: {
+    overall_score_leader: number | null;
+    indicators_led_count: Record<string, number>;
+  };
+}
+
+export async function compareDistricts(districtCodes: number[], profile?: string) {
+  const res = await fetch(`${API_BASE}/api/v1/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ district_codes: districtCodes, profile }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? `API compare failed: ${res.status}`);
+  }
+  return res.json() as Promise<CompareResponse>;
+}

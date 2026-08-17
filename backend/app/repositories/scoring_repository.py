@@ -510,7 +510,15 @@ def compare_districts(lgd_district_codes: list[int], profile_code: str) -> dict 
     for code in sorted(by_indicator.keys()):
         values = by_indicator[code]
         present = {c: v[1] for c, v in values.items() if v[1] is not None}
-        leader = max(present, key=lambda c: present[c]) if present else None
+        # None means either no data or a genuine tie — max() alone would
+        # silently pick one side of a tie (e.g. two districts both hitting
+        # the CAPI statutory-minimum ceiling) and misreport it as a real
+        # lead, which a "trade-off summary" must not do.
+        leader = None
+        if present:
+            top_value = max(present.values())
+            tied_at_top = [c for c, v in present.items() if v == top_value]
+            leader = tied_at_top[0] if len(tied_at_top) == 1 else None
         indicators.append(
             {
                 "indicator_code": code,

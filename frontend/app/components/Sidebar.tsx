@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MapPinned, DatabaseZap, Trophy } from "lucide-react";
+import { LayoutDashboard, MapPinned, DatabaseZap, Trophy, GitCompare } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/" },
   { href: "/rankings", label: "Rankings", icon: Trophy, match: (p: string) => p.startsWith("/rankings") },
   { href: "/districts", label: "Districts", icon: MapPinned, match: (p: string) => p.startsWith("/districts") },
+  { href: "/compare", label: "Compare", icon: GitCompare, match: (p: string) => p.startsWith("/compare") },
 ];
 
 function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
